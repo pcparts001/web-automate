@@ -1193,15 +1193,9 @@ class ChromeAutomationTool:
             
             if not new_elements:
                 self.logger.warning("プロンプト送信後の新しいmessage-content-id要素が見つかりません")
-                self.logger.warning("フォールバック: 最新のID要素を無条件で取得します")
-                
-                # フォールバック：最新IDの要素を無条件で選択
-                if elements_with_id:
-                    latest_id, latest_element, latest_text = elements_with_id[0]  # 最大ID
-                    self.logger.info(f"フォールバック選択: message-content-id={latest_id}")
-                    return self.clean_response_text(latest_text)
-                else:
-                    return None
+                # フォールバックロジックを削除 - Noneを返してget_response_text()で再生成ボタンをチェック
+                self.logger.info("有効な応答要素がないためNoneを返します - 再生成ボタンチェックへ")
+                return None
             
             # 最新のID（最大ID）を持つ要素を選択
             latest_id, latest_element, latest_text = new_elements[0]
