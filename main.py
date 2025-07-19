@@ -1496,8 +1496,9 @@ class ChromeAutomationTool:
         
         # 自動リトライ機能を実行（再生成ボタンが表示された場合の処理）
         if not self.handle_regenerate_with_retry():
-            # 5回連続で再生成ボタンが表示された場合は処理を終了
-            return False
+            # 5回連続で再生成ボタンが表示された場合はエラーメッセージを返す
+            self.logger.warning("5回連続で再生成ボタンが表示されました - フォールバック処理が必要")
+            return False, "REGENERATE_RETRY_FAILED"
         
         # 正常な応答テキストを取得
         response_text = self.get_response_text()

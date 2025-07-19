@@ -85,6 +85,8 @@ class AutomationGUI:
                 self.response_queue.put(response_text)
             else:
                 # 失敗した場合またはエラーメッセージが含まれる場合の処理
+                self.status_queue.put(f"⚠️ エラー検出: {response_text if response_text else 'None'}")
+                
                 if use_fallback and fallback_message.strip():
                     # フォールバックメッセージを自動送信
                     self.status_queue.put("🔄 フォールバックメッセージを自動送信中...")
@@ -92,6 +94,10 @@ class AutomationGUI:
                     try:
                         # 直接テキスト入力と送信を実行（既存のロジックを使用）
                         self.status_queue.put("📝 フォールバックテキスト入力中...")
+                        
+                        # フォールバック送信前に状態をリセット
+                        self.tool.existing_response_count = self.tool.count_existing_responses()
+                        self.tool.current_prompt_text = fallback_message.strip()
                         
                         # テキスト入力フィールドを取得
                         text_input = self.tool.find_text_input()
@@ -108,9 +114,15 @@ class AutomationGUI:
                             elif submit_button:
                                 submit_button.click()
                             
-                            # 応答を待機して取得
-                            time.sleep(3)
-                            fallback_response_text = self.tool.get_response_text()
+                            # 少し待機してから応答をチェック
+                            time.sleep(5)
+                            
+                            # 再生成リトライ処理を実行
+                            retry_success = self.tool.handle_regenerate_with_retry()
+                            if retry_success:
+                                fallback_response_text = self.tool.get_response_text()
+                            else:
+                                fallback_response_text = None
                             
                             if isinstance(fallback_response_text, tuple):
                                 # タプルの場合は2番目の要素（応答テキスト）を取得
