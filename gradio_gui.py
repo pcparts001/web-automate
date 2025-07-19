@@ -80,28 +80,57 @@ class AutomationGUI:
             # single promptとして処理
             success, response_text = self.tool.process_single_prompt(prompt_text)
             
-            if success and response_text:
+            if success and response_text and "応答の生成中にエラーが発生" not in response_text:
                 self.status_queue.put("✅ 応答受信完了")
                 self.response_queue.put(response_text)
             else:
-                # 失敗した場合の処理
+                # 失敗した場合またはエラーメッセージが含まれる場合の処理
                 if use_fallback and fallback_message.strip():
                     # フォールバックメッセージを自動送信
                     self.status_queue.put("🔄 フォールバックメッセージを自動送信中...")
+                    
                     try:
-                        fallback_success, fallback_response = self.tool.process_single_prompt(fallback_message.strip())
+                        # 直接テキスト入力と送信を実行（既存のロジックを使用）
+                        self.status_queue.put("📝 フォールバックテキスト入力中...")
                         
-                        if fallback_success and fallback_response:
-                            self.status_queue.put("✅ フォールバック応答受信完了")
-                            self.response_queue.put(fallback_response)
+                        # テキスト入力フィールドを取得
+                        text_input = self.tool.find_text_input()
+                        if text_input:
+                            text_input.clear()
+                            text_input.send_keys(fallback_message.strip())
+                            self.status_queue.put("📤 フォールバック送信中...")
+                            
+                            # 送信
+                            submit_button = self.tool.find_submit_button()
+                            if submit_button == "ENTER_KEY":
+                                from selenium.webdriver.common.keys import Keys
+                                text_input.send_keys(Keys.RETURN)
+                            elif submit_button:
+                                submit_button.click()
+                            
+                            # 応答を待機して取得
+                            time.sleep(3)
+                            fallback_response_text = self.tool.get_response_text()
+                            
+                            if isinstance(fallback_response_text, tuple):
+                                # タプルの場合は2番目の要素（応答テキスト）を取得
+                                fallback_response_text = fallback_response_text[1]
+                                
+                            if fallback_response_text and "応答の生成中にエラーが発生" not in fallback_response_text:
+                                self.status_queue.put("✅ フォールバック応答受信完了")
+                                self.response_queue.put(fallback_response_text)
+                            else:
+                                self.status_queue.put("⚠️ フォールバック送信も失敗 - メッセージを表示")
+                                self.response_queue.put(fallback_message.strip())
                         else:
-                            self.status_queue.put("⚠️ フォールバック送信も失敗 - メッセージを表示")
+                            self.status_queue.put("❌ テキスト入力フィールドが見つからない")
                             self.response_queue.put(fallback_message.strip())
+                            
                     except Exception as fallback_error:
                         self.status_queue.put(f"❌ フォールバック送信エラー: {str(fallback_error)}")
                         self.response_queue.put(fallback_message.strip())
                 else:
-                    error_msg = "応答の取得に失敗しました"
+                    error_msg = response_text if response_text else "応答の取得に失敗しました"
                     self.status_queue.put("❌ 応答取得失敗")
                     self.response_queue.put(error_msg)
                 

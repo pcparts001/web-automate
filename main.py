@@ -1501,7 +1501,7 @@ class ChromeAutomationTool:
         
         # 正常な応答テキストを取得
         response_text = self.get_response_text()
-        if response_text and response_text != "REGENERATE_ERROR_DETECTED":
+        if response_text and response_text != "REGENERATE_ERROR_DETECTED" and "応答の生成中にエラーが発生" not in response_text:
             filepath = self.save_to_markdown(response_text, prompt_text)
             self.logger.info("処理が正常に完了しました")
             return True, response_text  # GUIのために応答テキストも返す
@@ -1509,7 +1509,7 @@ class ChromeAutomationTool:
             self.logger.warning("応答テキストが取得できませんでした")
             # デバッグ情報を出力してページ構造を確認
             self.debug_page_structure()
-            return False, None
+            return False, response_text  # エラーメッセージも返す（フォールバック判定用）
 
     def process_continuous_prompts(self):
         """継続的にプロンプトを処理する"""
