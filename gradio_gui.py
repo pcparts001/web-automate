@@ -160,6 +160,12 @@ class AutomationGUI:
                                         # 再度フォールバックメッセージを送信
                                         text_input = self.tool.find_text_input()
                                         if text_input:
+                                            # 送信前に現在の応答数を記録（新しい応答検出用）
+                                            from selenium.webdriver.common.by import By
+                                            current_message_elements = self.tool.driver.find_elements(By.CSS_SELECTOR, "[message-content-id]")
+                                            pre_send_message_count = len(current_message_elements)
+                                            self.status_queue.put(f"📊 送信前message-content要素数: {pre_send_message_count}")
+                                            
                                             # 送信前に現在の状態をリセット
                                             self.tool.existing_response_count = self.tool.count_existing_responses()
                                             self.tool.current_prompt_text = fallback_message.strip()
@@ -189,18 +195,31 @@ class AutomationGUI:
                                             # 再生成ボタンが消えたかチェック
                                             regenerate_button_check = self.tool.find_regenerate_button()
                                             if not regenerate_button_check:
-                                                # 再生成ボタンが消えた - 応答をチェック
-                                                final_fallback_response = self.tool.get_latest_message_content(wait_for_streaming=False)
-                                                if isinstance(final_fallback_response, tuple):
-                                                    final_fallback_response = final_fallback_response[1]
+                                                # 再生成ボタンが消えた - 新しい応答が追加されたかチェック
+                                                current_message_elements = self.tool.driver.find_elements(By.CSS_SELECTOR, "[message-content-id]")
+                                                post_send_message_count = len(current_message_elements)
+                                                self.status_queue.put(f"📊 送信後message-content要素数: {post_send_message_count} (送信前: {pre_send_message_count})")
                                                 
-                                                if final_fallback_response and "応答の生成中にエラーが発生" not in final_fallback_response and len(final_fallback_response.strip()) > 20:
-                                                    self.status_queue.put(f"✅ フォールバック再実行成功 ({retry_attempt + 1}回目)")
-                                                    self.response_queue.put(final_fallback_response)
-                                                    fallback_success = True
-                                                    break
+                                                if post_send_message_count > pre_send_message_count:
+                                                    # 新しい応答が追加された
+                                                    final_fallback_response = self.tool.get_latest_message_content(wait_for_streaming=False)
+                                                    if isinstance(final_fallback_response, tuple):
+                                                        final_fallback_response = final_fallback_response[1]
+                                                    
+                                                    # 応答内容の検証を強化
+                                                    if (final_fallback_response and 
+                                                        "応答の生成中にエラーが発生" not in final_fallback_response and 
+                                                        len(final_fallback_response.strip()) > 50 and
+                                                        fallback_message.strip()[:20] not in final_fallback_response):  # フォールバックメッセージ自体でない
+                                                        
+                                                        self.status_queue.put(f"✅ フォールバック再実行成功: 新しい応答を検出 ({retry_attempt + 1}回目)")
+                                                        self.response_queue.put(final_fallback_response)
+                                                        fallback_success = True
+                                                        break
+                                                    else:
+                                                        self.status_queue.put(f"⚠️ 新しい応答はあるが内容が不適切 ({retry_attempt + 1}回目): {len(final_fallback_response.strip()) if final_fallback_response else 0}文字")
                                                 else:
-                                                    self.status_queue.put(f"⚠️ 再生成ボタンは消えたが有効な応答が取得できず ({retry_attempt + 1}回目)")
+                                                    self.status_queue.put(f"⚠️ 再生成ボタンは消えたが新しい応答が追加されていない ({retry_attempt + 1}回目)")
                                             else:
                                                 self.status_queue.put(f"⚠️ フォールバック再実行 {retry_attempt + 1} 回目: まだ再生成ボタンが表示中")
                                         
