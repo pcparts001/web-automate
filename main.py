@@ -697,7 +697,7 @@ class ChromeAutomationTool:
                 try:
                     element_info['xpath'] = self.driver.execute_script(
                         "function getXPath(element) {"
-                        "  if (element.id !== '') return '//*[@id="' + element.id + '"]';"
+                        "  if (element.id !== '') return '//*[@id=\"" + element.id + "\"]';"
                         "  if (element === document.body) return '/html/body';"
                         "  var ix = 0;"
                         "  var siblings = element.parentNode.childNodes;"
@@ -1147,25 +1147,12 @@ class ChromeAutomationTool:
                         masked_preview = self.mask_text_for_debug(text_content)
                         self.logger.info(f"  プレビュー: {masked_preview}")
                         
-                        # エラーメッセージやThinking状態は候補から除外（フォールバック処理時）
+                        # エラーメッセージは候補から除外
                         if "応答の生成中にエラーが発生" in text_content or "再生成" in text_content:
                             self.logger.info(f"  ✗ エラーメッセージのため除外: {text_content[:50]}...")
                             continue
                         
-                        # フォールバック処理時（wait_for_streaming=False）はThinking状態を除外
-                        if not wait_for_streaming and ("Thinking" in text_content or "thinking" in element_classes):
-                            self.logger.info(f"  ✗ フォールバック処理時のThinking状態のため除外: {text_content[:50]}...")
-                            continue
-                        
-                        # thinking状態やストリーミング中でも候補に含める（テキストが短くても）
-                        is_thinking = "thinking" in element_classes
-                        has_cursor = "█" in text_content
-                        
-                        if len(text_content) > 10 or is_thinking or has_cursor:  # 条件を緩和
-                            self.logger.info(f"  ✓ 候補要素として追加（thinking={is_thinking}, cursor={has_cursor}）")
-                            elements_with_id.append((int(content_id), element, text_content))
-                        else:
-                            self.logger.info(f"  ✗ テキストが短すぎます（{len(text_content)}文字）")
+                        elements_with_id.append((int(content_id), element, text_content))
                     else:
                         self.logger.debug(f"要素{i+1}: 無効なID={content_id}")
                 else:
@@ -1183,97 +1170,25 @@ class ChromeAutomationTool:
                 masked_content = self.mask_text_for_debug(text_content, max_preview=10)
                 self.logger.info(f"ID={content_id}: {masked_content}")
             
-            self.logger.info(f"=== プロンプト送信前の既存応答数: {self.existing_response_count} ===")
-            
-            # プロンプト送信後に新しく現れた要素のみを対象とする
+            # プロンプト送信後に新しく現れた応答らしい要素を探す
             new_elements = []
+            prompt_texts_to_check = []
+            if self.original_user_prompt:
+                prompt_texts_to_check.append(self.original_user_prompt.strip())
+            if self.current_prompt_text:
+                prompt_texts_to_check.append(self.current_prompt_text.strip())
+
             for content_id, element, text_content in elements_with_id:
-                self.logger.info(f"検証中 ID={content_id}: existing_count={self.existing_response_count}")
+                # プロンプトと完全一致する場合のみ除外する
+                if text_content.strip() in prompt_texts_to_check:
+                    self.logger.info(f"  ✗ ID={content_id}は送信したプロンプトと完全一致するため除外")
+                    continue
                 
-                # 新しい要素の判定ロジックを改善
-                # プロンプト送信前のexisting_response_countは、message-content-idの個数ではなく
-                # 従来のセレクターでの応答要素数なので、message-content-idとは比較できない
-                # 代わりに、プロンプトテキストを含まず、応答らしい内容を持つ要素を最新として扱う
-                
-                        # まず、送信したプロンプトテキストが含まれていないかチェック（強化版）
-                prompt_check_passed = True
-                
-                # ユーザーの元プロンプトと現在のプロンプトの両方でチェック
-                prompt_texts_to_check = []
-                if hasattr(self, 'original_user_prompt') and self.original_user_prompt:
-                    prompt_texts_to_check.append(('original', self.original_user_prompt))
-                if hasattr(self, 'current_prompt_text') and self.current_prompt_text:
-                    prompt_texts_to_check.append(('current', self.current_prompt_text))
-                
-                for prompt_type, prompt_text in prompt_texts_to_check:
-                    if prompt_text and prompt_text[:30] in text_content:
-                        masked_prompt = self.mask_text_for_debug(prompt_text)
-                        self.logger.info(f"  ✗ ID={content_id}に{prompt_type}プロンプトテキストが含まれています: {masked_prompt}")
-                        prompt_check_passed = False
-                        break
-                
-                # 追加プロンプト検出ヒューリスティック
-                if prompt_check_passed:
-                    # テキストの長さと内容でユーザープロンプトっぽいかチェック
-                    is_user_prompt_like = False
-                    
-                    # 短いテキストで、一般的なプロンプトパターンを含む場合
-                    if len(text_content.strip()) < 200:  # 200文字未満の短いテキスト
-                        prompt_patterns = [
-                            "を書いてください", "を教えて", "どう思いますか", "について",
-                            "write", "tell me", "explain", "how", "what", "please", "?", "？",
-                            "hello", "hi", "こんにちは", "おはよう"
-                        ]
-                        
-                        if any(pattern in text_content.lower() for pattern in prompt_patterns):
-                            is_user_prompt_like = True
-                            masked_pattern = self.mask_text_for_debug(text_content)
-                            self.logger.info(f"  ✗ ID={content_id}はプロンプトパターンを含む短いテキストのため除外: {masked_pattern}")
-                    
-                    if not is_user_prompt_like:
-                        self.logger.info(f"  ✓ ID={content_id}はプロンプトテキストを含みません")
-                    else:
-                        prompt_check_passed = False
-                
-                if prompt_check_passed:
-                    element_classes = element.get_attribute("class") or ""
-                    is_thinking = "thinking" in element_classes
-                    has_cursor = "█" in text_content
-                    
-                    if wait_for_streaming:
-                        # 通常のストリーミング待機時：thinking状態やストリーミング中の要素は優先的に採用
-                        if is_thinking or has_cursor:
-                            self.logger.info(f"  ✓ ID={content_id}はthinking/ストリーミング中要素として採用")
-                            new_elements.append((content_id, element, text_content))
-                        else:
-                            # 通常の応答キーワードチェック
-                            response_keywords = ["回答:", "比較", "について", "です", "ます", "である", "。", "甘さ", "塩", "砂糖", "今日", "日差し", "強く", "琵琶湖", "日本一", "大きな", "湖", "富士山", "標高", "はい、", "面積", "平方キロメートル"]
-                            found_keywords = [kw for kw in response_keywords if kw in text_content]
-                            
-                            if found_keywords:
-                                self.logger.info(f"  ✓ ID={content_id}に応答キーワードを発見: {found_keywords}")
-                                new_elements.append((content_id, element, text_content))
-                            else:
-                                self.logger.info(f"  ✗ ID={content_id}に応答キーワードがありません")
-                    else:
-                        # フォールバック処理時：thinking状態は除外、通常の応答のみ対象
-                        if is_thinking or has_cursor:
-                            self.logger.info(f"  ✗ ID={content_id}はフォールバック処理時のthinking状態のため除外")
-                        else:
-                            # 通常の応答キーワードチェック
-                            response_keywords = ["回答:", "比較", "について", "です", "ます", "である", "。", "甘さ", "塩", "砂糖", "今日", "日差し", "強く", "琵琶湖", "日本一", "大きな", "湖", "富士山", "標高", "はい、", "面積", "平方キロメートル"]
-                            found_keywords = [kw for kw in response_keywords if kw in text_content]
-                            
-                            if found_keywords:
-                                self.logger.info(f"  ✓ ID={content_id}に応答キーワードを発見: {found_keywords}")
-                                new_elements.append((content_id, element, text_content))
-                            else:
-                                self.logger.info(f"  ✗ ID={content_id}に応答キーワードがありません")
+                # 応答候補として追加
+                new_elements.append((content_id, element, text_content))
             
             if not new_elements:
-                self.logger.warning("プロンプト送信後の新しいmessage-content-id要素が見つかりません")
-                # フォールバックロジックを削除 - Noneを返してget_response_text()で再生成ボタンをチェック
-                self.logger.info("有効な応答要素がないためNoneを返します - 再生成ボタンチェックへ")
+                self.logger.warning("プロンプト送信後の新しい応答候補が見つかりません")
                 return None
             
             # 最新のID（最大ID）を持つ要素を選択
@@ -1281,30 +1196,23 @@ class ChromeAutomationTool:
             masked_response = self.mask_text_for_debug(latest_text)
             self.logger.info(f"🎯 最新応答を特定: message-content-id={latest_id}, 応答内容={masked_response}")
             
-            # セレクター文字列を作成
-            selector = f"[message-content-id='{latest_id}']"
-            
             if wait_for_streaming:
-                # ストリーミング応答の完了を待機
+                selector = f"[message-content-id='{latest_id}']"
                 self.logger.info("ストリーミング応答の完了を待機中...")
                 final_text = self.wait_for_streaming_response_complete(selector)
                 
                 if final_text == "REGENERATE_ERROR_DETECTED":
-                    # 再生成エラーが検出された場合はNoneを返してリトライを促す
-                    self.logger.warning(f"再生成エラーが検出されました - リトライが必要です ({self.current_retry_count}回目)")
+                    self.logger.warning(f"再生成エラーが検出されました")
                     return None
                 elif final_text and "応答の生成中にエラーが発生しました" not in final_text:
                     masked_final = self.mask_text_for_debug(final_text)
                     self.logger.info(f"🎯 ストリーミング完了後: {masked_final}")
                     return final_text
                 else:
-                    # ストリーミング検出に失敗した場合は、現在のテキストを返す
                     self.logger.warning("ストリーミング検出失敗、現在のテキストを返します")
                     return self.clean_response_text(latest_text)
             else:
-                # ストリーミング待機をスキップして現在のテキストを返す
-                skip_masked = self.mask_text_for_debug(latest_text)
-                self.logger.info(f"🎯 ストリーミング待機をスキップ - {skip_masked}")
+                # ストリーミング待機をスキップ
                 return self.clean_response_text(latest_text)
                 
         except Exception as e:
@@ -1313,76 +1221,21 @@ class ChromeAutomationTool:
 
     def get_response_text(self):
         """応答テキストを取得（ストリーミング対応）"""
-        # 強化されたエラーメッセージチェック
-        try:
-            # Thinking中はエラーチェックをスキップしてストリーミング完了を待機
-            thinking_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Thinking')]")
-            visible_thinking = [elem for elem in thinking_elements if elem.is_displayed()]
-            if visible_thinking:
-                self.logger.info("Thinking中のためエラーチェックをスキップしてストリーミング完了を待機")
-                # ストリーミング完了を待機
-                latest_response_text = self.get_latest_message_content(wait_for_streaming=True)
-                if latest_response_text:
-                    return latest_response_text
-                else:
-                    self.logger.warning("Thinking後もストリーミング応答が取得できませんでした - 再生成ボタンをチェック")
-                    # 通常の再生成ボタンチェックに進む
-            
-            # 再生成ボタンや関連エラーメッセージを検出（より厳格に）
-            error_selectors = [
-                "//*[contains(text(), '応答の生成中にエラーが発生')]",
-                "//*[contains(text(), '応答を再生成') and @role='button']",  # ボタン要素のみ
-                "*[class*='retry'][class*='bubble']",  # より具体的
-                ".bubble.retry"
-            ]
-            
-            for selector in error_selectors:
-                try:
-                    if selector.startswith("//"):
-                        elements = self.driver.find_elements(By.XPATH, selector)
-                    else:
-                        elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                    
-                    visible_errors = [elem for elem in elements if elem.is_displayed()]
-                    if visible_errors:
-                        self.logger.warning(f"エラー要素検出（{selector}）- 応答取得をスキップ: {len(visible_errors)}個")
-                        for elem in visible_errors[:2]:  # 最初の2個をログ出力
-                            try:
-                                self.logger.info(f"  エラー要素: {elem.text.strip()[:100]}")
-                            except:
-                                pass
-                        return None
-                except:
-                    continue
-                    
-        except Exception as e:
-            self.logger.debug(f"エラーメッセージチェック中のエラー: {e}")
-        
-        # 最新のmessage-content-id要素を直接検索する専用メソッドを最初に試す
+        # 最新のmessage-content-id要素を直接検索
         latest_response_text = self.get_latest_message_content()
-        self.logger.info(f"get_latest_message_content()の結果: {self.mask_text_for_debug(latest_response_text) if latest_response_text else 'None'}")
         
-        # 応答が取得できた場合でも、エラーメッセージでないか確認
         if latest_response_text:
-            if "応答の生成中にエラーが発生" in latest_response_text:
-                self.logger.warning("取得した応答にエラーメッセージが含まれています - 再生成ボタンをチェック")
-            else:
-                self.logger.info("有効な応答を取得 - 再生成ボタンチェックをスキップ")
-                return latest_response_text
+            return latest_response_text
         
-        # 応答が取得できない場合、またはエラーメッセージの場合は再生成ボタンをチェック
-        self.logger.warning("応答が取得できないか、エラーメッセージのため再生成ボタンをチェック")
-        
-        # 再生成ボタンがあるかチェック
+        # 応答が取得できない場合は再生成ボタンをチェック
+        self.logger.warning("応答が取得できないため再生成ボタンをチェックします")
         regenerate_button = self.find_regenerate_button()
-        self.logger.info(f"再生成ボタン検出結果: {bool(regenerate_button)} (型: {type(regenerate_button)})")
         
         if regenerate_button:
             self.logger.warning("再生成ボタンを検出 - REGENERATE_ERROR_DETECTEDを返します")
             return "REGENERATE_ERROR_DETECTED"
         
-        # 再生成ボタンもない場合は絶対的なエラー
-        self.logger.error("応答も再生成ボタンも見つからない - 絶対的エラー")
+        self.logger.error("応答も再生成ボタンも見つかりません")
         return None
     
     def save_to_markdown(self, text, prompt):
@@ -1406,103 +1259,100 @@ class ChromeAutomationTool:
         self.logger.info(f"ファイルを保存しました: {filepath}")
         print(f"📁 応答をファイルに保存しました: {filename}")
         return filepath
+
+    def send_message(self, prompt_text):
+        """
+        テキスト入力と送信を統一的に扱うメソッド。
+        ユーザー操作を模倣し、複数の方法で確実な送信を試みる。
+        """
+        self.logger.info(f"メッセージ送信処理開始: {self.mask_text_for_debug(prompt_text)}")
+        
+        try:
+            # 1. テキスト入力フィールドを探す
+            text_input = self.find_text_input()
+            if not text_input:
+                self.logger.error("テキスト入力フィールドが見つかりません。")
+                return False
+
+            # 2. ユーザー操作を模倣：クリックしてフォーカス
+            try:
+                text_input.click()
+                self.logger.info("テキスト入力フィールドにフォーカスしました。")
+            except Exception as e:
+                self.logger.warning(f"フィールドへのクリックに失敗: {e}")
+
+            # 3. JavaScriptで確実に入力内容を設定し、イベントを発火
+            self.logger.info("JavaScriptでテキストを設定し、inputイベントを発火させます。")
+            escaped_text = prompt_text.replace('\\', '\\\\').replace('"', '\"').replace('\n', '\\n')
+            self.driver.execute_script(f'arguments[0].value = "{escaped_text}";', text_input)
+            self.driver.execute_script('arguments[0].dispatchEvent(new Event("input", { bubbles: true }));', text_input)
+            
+            time.sleep(0.5) # イベントが処理されるのを少し待つ
+
+            # 4. あらゆる方法で送信を試みる
+            send_success = False
+            
+            # 方法A: 送信ボタンのクリック
+            submit_button = self.find_submit_button()
+            if submit_button and submit_button != "ENTER_KEY":
+                try:
+                    submit_button.click()
+                    self.logger.info("方法A: 送信ボタンのクリックに成功しました。")
+                    send_success = True
+                except Exception as e:
+                    self.logger.warning(f"方法A失敗: {e}")
+
+            # 方法B: JavaScriptによるフォーム送信
+            if not send_success:
+                try:
+                    form_element = text_input.find_element(By.XPATH, "./ancestor-or-self::form")
+                    self.driver.execute_script("arguments[0].submit();", form_element)
+                    self.logger.info("方法B: JavaScriptによるフォーム送信に成功しました。")
+                    send_success = True
+                except Exception as e:
+                    self.logger.warning(f"方法B失敗: {e}")
+
+            # 方法C: キーボードイベントの発火
+            if not send_success:
+                try:
+                    from selenium.webdriver.common.keys import Keys
+                    text_input.send_keys(Keys.ENTER)
+                    self.logger.info("方法C: Enterキーの送信に成功しました。")
+                    send_success = True
+                except Exception as e:
+                    self.logger.warning(f"方法C失敗: {e}")
+
+            if not send_success:
+                self.logger.error("すべての送信方法が失敗しました。")
+                return False
+            
+            self.logger.info("メッセージが正常に送信されたと判断します。")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"メッセージ送信処理中の予期せぬエラー: {e}")
+            return False
     
     def process_single_prompt(self, prompt_text):
         """単一のプロンプトを処理（メイン処理）"""
         # プロンプト送信前の既存応答数とコピーボタン数を記録
         self.existing_response_count = self.count_existing_responses()
         self.existing_copy_button_count = self.count_existing_copy_buttons()
-        self.current_prompt_text = prompt_text  # 送信するプロンプトテキストを保存
+        self.current_prompt_text = prompt_text
         
-        # ユーザーの元プロンプトを保存（フォールバック時の区別用）
-        if not hasattr(self, 'original_user_prompt') or not self.original_user_prompt:
+        if not self.original_user_prompt:
             self.original_user_prompt = prompt_text
             self.logger.info(f"ユーザー元プロンプトを記録: {self.mask_text_for_debug(self.original_user_prompt)}")
         
-        self.prompt_send_time = time.time()  # プロンプト送信時刻を記録
-        self.logger.info(f"プロンプト送信前 - 既存応答数: {self.existing_response_count}, 既存コピーボタン数: {self.existing_copy_button_count}")
-        
-        # テキスト入力フィールドを探す（リトライ機能付き）
-        text_input = None
-        max_input_retries = 3
-        
-        for retry in range(max_input_retries):
-            try:
-                text_input = self.find_text_input()
-                if text_input:
-                    # 要素が利用可能かテスト
-                    text_input.is_displayed()
-                    break
-                else:
-                    self.logger.warning(f"テキスト入力フィールド検索リトライ {retry + 1}/{max_input_retries}")
-                    time.sleep(2)
-            except Exception as e:
-                self.logger.warning(f"テキスト入力フィールド取得エラー（リトライ {retry + 1}/{max_input_retries}）: {e}")
-                time.sleep(2)
-                
-        if not text_input:
-            self.logger.error("テキスト入力フィールドが見つかりません（リトライ後）")
-            return False, "SEND_FAILED"
-            
-        # プロンプトを入力（複数行対応）
-        try:
-            text_input.clear()
-            # 複数行テキストの場合、JavaScriptで設定する方が確実
-            if '\n' in prompt_text:
-                self.logger.info("複数行プロンプトをJavaScriptで設定中...")
-                # JavaScriptでvalueを直接設定
-                escaped_text = prompt_text.replace('\\', '\\\\').replace('"', '\"').replace('\n', '\\n')
-                self.driver.execute_script(f'arguments[0].value = "{escaped_text}";', text_input)
-                # inputイベントを発火
-                self.driver.execute_script('arguments[0].dispatchEvent(new Event("input", { bubbles: true }));', text_input)
-            else:
-                text_input.send_keys(prompt_text)
-            
-            self.logger.info(f"プロンプトを入力: {prompt_text[:50]}...")
-        except Exception as e:
-            self.logger.error(f"プロンプト入力エラー: {e}")
-            return False, "SEND_FAILED"
-        
-        # 送信ボタンをクリック（リトライ機能付き）
-        submit_success = False
-        max_submit_retries = 3
-        
-        for retry in range(max_submit_retries):
-            try:
-                submit_button = self.find_submit_button()
-                if submit_button == "ENTER_KEY":
-                    # Enterキーを送信
-                    from selenium.webdriver.common.keys import Keys
-                    text_input.send_keys(Keys.RETURN)
-                    self.logger.info("Enterキーで送信しました")
-                    submit_success = True
-                    break
-                elif submit_button:
-                    submit_button.click()
-                    self.logger.info("送信ボタンをクリックしました")
-                    submit_success = True
-                    break
-                else:
-                    self.logger.warning(f"送信ボタン検索リトライ {retry + 1}/{max_submit_retries}")
-                    time.sleep(2)
-            except Exception as e:
-                self.logger.warning(f"送信ボタンクリックエラー（リトライ {retry + 1}/{max_submit_retries}）: {e}")
-                time.sleep(2)
-                
-        if not submit_success:
-            self.logger.error("送信ボタンが見つかりません（リトライ後）")
+        # 統一された送信メソッドを呼び出す
+        if not self.send_message(prompt_text):
+            self.logger.error("メッセージ送信に失敗したため、処理を中断します。")
             return False, "SEND_FAILED"
             
         # 少し待機してから応答をチェック
         time.sleep(3)
         
-        # 自動リトライ機能を無効化 - get_response_text()で再生成ボタンをチェックしてフォールバックへ移行
-        # if not self.handle_regenerate_with_retry():
-        #     self.logger.warning("5回連続で再生成ボタンが表示されました - フォールバック処理が必要")
-        #     return False, "REGENERATE_RETRY_FAILED"
-        self.logger.info("自動リトライ機能をスキップ - get_response_text()で再生成チェックを実行")
-        
-        # 正常な応答テキストを取得
+        self.logger.info("応答テキストの取得を開始します...")
         response_text = self.get_response_text()
         
         # 再生成エラーの場合は明示的に失敗を返す
@@ -1513,12 +1363,12 @@ class ChromeAutomationTool:
         if response_text and "応答の生成中にエラーが発生" not in response_text:
             filepath = self.save_to_markdown(response_text, prompt_text)
             self.logger.info("処理が正常に完了しました")
-            return True, response_text  # GUIのために応答テキストも返す
+            return True, response_text
         else:
             self.logger.warning(f"応答テキストが取得できませんでした: {response_text}")
             # デバッグ情報を出力してページ構造を確認
             self.debug_page_structure()
-            return False, response_text  # エラーメッセージも返す（フォールバック判定用）
+            return False, response_text
 
     def process_continuous_prompts(self):
         """継続的にプロンプトを処理する"""

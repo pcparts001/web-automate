@@ -57,6 +57,12 @@ class AutomationGUI:
     def _run_automation(self, url, prompt_text, use_fallback, fallback_message, retry_count):
         """バックグラウンドで自動化を実行"""
         try:
+            # --- パラメータのログ出力 ---
+            logging.info("--- Gradioからのパラメータ ---")
+            logging.info(f"use_fallback: {use_fallback} (type: {type(use_fallback)})")
+            logging.info(f"fallback_message: '{fallback_message}'")
+            logging.info("--------------------------")
+
             # Chrome初期化（初回のみ）
             if not self.chrome_initialized:
                 self.status_queue.put("Chrome起動中...")
@@ -110,14 +116,14 @@ class AutomationGUI:
                     # 統一された送信メソッドでフォールバックメッセージを送信
                     self.tool.current_prompt_text = fallback_message.strip() # ログ記録用
                     if not self.tool.send_message(fallback_message.strip()):
-                        self.status_queue.put("❌ フォールバックメッセージの送信に失敗")
+                        self.status_queue.put("❌ フォールバ��クメッセージの送信に失敗")
                         time.sleep(2) # 次の試行まで少し待つ
                         continue
 
                     self.status_queue.put("⏳ 送信後、応答を待機中...")
                     time.sleep(5) # 応答生成のための十分な待機時間
 
-                    # ��答をチェック
+                    # 応答をチェック
                     final_response = self.tool.get_response_text()
 
                     if final_response and final_response != "REGENERATE_ERROR_DETECTED":
@@ -225,6 +231,6 @@ def create_interface():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    print("🚀 Chrome自動操作ツール Web GUI を起動中...")
+    print("🚀 Chrome��動操作ツール Web GUI を起動中...")
     interface = create_interface()
     interface.launch(server_name="127.0.0.1", server_port=7860, share=False, show_error=True)
