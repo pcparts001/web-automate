@@ -7,6 +7,8 @@ MacのChromeブラウザを自動で操作し、特定のサイトのボタン�
 
 import time
 import logging
+import os
+import platform
 from datetime import datetime
 from pathlib import Path
 from selenium import webdriver
@@ -17,7 +19,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from webdriver_manager.chrome import ChromeDriverManager
-import platform
 
 
 class ChromeAutomationTool:
@@ -115,8 +116,6 @@ class ChromeAutomationTool:
             self.logger.info(f"ChromeDriverManagerが返したパス: {chrome_driver_path}")
             
             # ChromeDriverの実際の実行ファイルパスを探す
-            import os
-            from pathlib import Path
             
             driver_path = Path(chrome_driver_path)
             self.logger.info(f"パスの詳細: {driver_path}")
