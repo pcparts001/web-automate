@@ -1240,6 +1240,7 @@ class ChromeAutomationTool:
         """応答テキストを取得（ストリーミング対応）"""
         # 最新のmessage-content-id要素を直接検索
         latest_response_text = self.get_latest_message_content()
+        self.logger.debug(f"get_response_text: get_latest_message_contentからの戻り値: {self.mask_text_for_debug(latest_response_text) if latest_response_text else 'None'}")
         
         if latest_response_text:
             return latest_response_text
@@ -1371,6 +1372,7 @@ class ChromeAutomationTool:
         
         self.logger.info("応答テキストの取得を開始します...")
         response_text = self.get_response_text()
+        self.logger.debug(f"process_single_prompt: get_response_textからの戻り値: {self.mask_text_for_debug(response_text) if response_text else 'None'}")
         
         # 再生成エラーの場合は明示的に失敗を返す
         if response_text == "REGENERATE_ERROR_DETECTED":
