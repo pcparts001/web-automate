@@ -1166,7 +1166,6 @@ class ChromeAutomationTool:
                             self.logger.info(f"  ✗ エラーメッセージのため除外: {text_content[:50]}...")
                             continue
                         
-                        self.logger.debug(f"  要素{i+1}: ID={content_id}をelements_with_idに追加 (Thinking/エラーなし)")
                         elements_with_id.append((int(content_id), element, text_content))
                     else:
                         self.logger.debug(f"要素{i+1}: 無効なID={content_id}")
