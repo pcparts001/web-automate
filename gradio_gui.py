@@ -159,43 +159,43 @@ class AutomationGUI:
                                     send_success = True
                                 except Exception as e:
                                     self.status_queue.put(f"⚠️ [DEBUG] 方法1失敗: {e}")
-                            
-                            # 方法2: textarea専用送信（Shift+Enter）
-                            if not send_success:
-                                try:
-                                    # textareaの場合はShift+Enterを試す
-                                    if text_input.tag_name == "textarea":
-                                        text_input.send_keys(Keys.SHIFT + Keys.RETURN)
-                                        self.status_queue.put("🔍 [DEBUG] 方法2: Shift+Enterキーで送信実行")
-                                    else:
-                                        text_input.send_keys(Keys.RETURN)
-                                        self.status_queue.put("🔍 [DEBUG] 方法2: Enterキーで送信実行")
-                                    send_success = True
-                                except Exception as e:
-                                    self.status_queue.put(f"⚠️ [DEBUG] 方法2失敗: {e}")
-                            
-                            # 方法2.5: Ctrl+Enter
-                            if not send_success:
-                                try:
-                                    text_input.send_keys(Keys.CONTROL + Keys.RETURN)
-                                    self.status_queue.put("🔍 [DEBUG] 方法2.5: Ctrl+Enterキーで送信実行")
-                                    send_success = True
-                                except Exception as e:
-                                    self.status_queue.put(f"⚠️ [DEBUG] 方法2.5失敗: {e}")
-                            
-                            # 方法3: JavaScript強制送信（FormSubmit）
+
+                            # 方法2: JavaScript強制送信（FormSubmit） - 優先度を上げる
                             if not send_success:
                                 try:
                                     # フォーム要素を探して送信
                                     from selenium.webdriver.common.by import By
                                     form_element = text_input.find_element(By.XPATH, "./ancestor-or-self::form")
                                     self.tool.driver.execute_script("arguments[0].submit();", form_element)
-                                    self.status_queue.put("🔍 [DEBUG] 方法3: JavaScript form.submit()で送信実行")
+                                    self.status_queue.put("🔍 [DEBUG] 方法2: JavaScript form.submit()で送信実行")
+                                    send_success = True
+                                except Exception as e:
+                                    self.status_queue.put(f"⚠️ [DEBUG] 方法2失敗: {e}")
+                            
+                            # 方法3: textarea専用送信（Shift+Enter）
+                            if not send_success:
+                                try:
+                                    # textareaの場合はShift+Enterを試す
+                                    if text_input.tag_name == "textarea":
+                                        text_input.send_keys(Keys.SHIFT + Keys.RETURN)
+                                        self.status_queue.put("🔍 [DEBUG] 方法3: Shift+Enterキーで送信実行")
+                                    else:
+                                        text_input.send_keys(Keys.RETURN)
+                                        self.status_queue.put("🔍 [DEBUG] 方法3: Enterキーで送信実行")
                                     send_success = True
                                 except Exception as e:
                                     self.status_queue.put(f"⚠️ [DEBUG] 方法3失敗: {e}")
                             
-                            # 方法5: JavaScript Enterキーイベント発火（最終手段）
+                            # 方法4: Ctrl+Enter
+                            if not send_success:
+                                try:
+                                    text_input.send_keys(Keys.CONTROL + Keys.RETURN)
+                                    self.status_queue.put("🔍 [DEBUG] 方法4: Ctrl+Enterキーで送信実行")
+                                    send_success = True
+                                except Exception as e:
+                                    self.status_queue.put(f"⚠️ [DEBUG] 方法4失敗: {e}")
+                            
+                            # 方法5: JavaScript Enterキーイベント���火（最終手段）
                             if not send_success:
                                 try:
                                     self.status_queue.put("🔍 [DEBUG] 方法5: JavaScriptキーボードイベントで送信実行")
@@ -335,33 +335,44 @@ class AutomationGUI:
                                                     retry_send_success = True
                                                 except Exception as e:
                                                     self.status_queue.put(f"⚠️ [DEBUG] リトライ {retry_attempt + 1}: 方法1失敗: {e}")
-                                            
-                                            # 方法2: textarea専用送信
+
+                                            # 方法2: JavaScript強制送信（FormSubmit）
                                             if not retry_send_success:
                                                 try:
-                                                    if text_input.tag_name == "textarea":
-                                                        text_input.send_keys(Keys.SHIFT + Keys.RETURN)
-                                                        self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 方法2Shift+Enter成功")
-                                                    else:
-                                                        text_input.send_keys(Keys.RETURN)
-                                                        self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 方法2Enter成功")
+                                                    from selenium.webdriver.common.by import By
+                                                    form_element = text_input.find_element(By.XPATH, "./ancestor-or-self::form")
+                                                    self.tool.driver.execute_script("arguments[0].submit();", form_element)
+                                                    self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 方法2 JavaScript form.submit()成功")
                                                     retry_send_success = True
                                                 except Exception as e:
                                                     self.status_queue.put(f"⚠️ [DEBUG] リトライ {retry_attempt + 1}: 方法2失敗: {e}")
                                             
-                                            # 方法2.5: Ctrl+Enter
+                                            # 方法3: textarea専用送信
+                                            if not retry_send_success:
+                                                try:
+                                                    if text_input.tag_name == "textarea":
+                                                        text_input.send_keys(Keys.SHIFT + Keys.RETURN)
+                                                        self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 方法3 Shift+Enter成功")
+                                                    else:
+                                                        text_input.send_keys(Keys.RETURN)
+                                                        self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 方法3 Enter成功")
+                                                    retry_send_success = True
+                                                except Exception as e:
+                                                    self.status_queue.put(f"⚠️ [DEBUG] リトライ {retry_attempt + 1}: 方法3失敗: {e}")
+                                            
+                                            # 方法4: Ctrl+Enter
                                             if not retry_send_success:
                                                 try:
                                                     text_input.send_keys(Keys.CONTROL + Keys.RETURN)
-                                                    self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 方法2.5Ctrl+Enter成功")
+                                                    self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 方法4 Ctrl+Enter成功")
                                                     retry_send_success = True
                                                 except Exception as e:
-                                                    self.status_queue.put(f"⚠️ [DEBUG] リトライ {retry_attempt + 1}: 方法2.5失敗: {e}")
+                                                    self.status_queue.put(f"⚠️ [DEBUG] リトライ {retry_attempt + 1}: 方法4失敗: {e}")
                                             
-                                            # 方法4: JavaScript Enterキーイベント（最終手段）
+                                            # 方法5: JavaScript Enterキーイベント（最終手段）
                                             if not retry_send_success:
                                                 try:
-                                                    self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 方法4 JavaScriptキーボードイベント実行")
+                                                    self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 方法5 JavaScriptキーボードイベント実行")
                                                     self.tool.driver.execute_script("""
                                                         const input = arguments[0];
                                                         const event = new KeyboardEvent('keydown', {
@@ -376,7 +387,7 @@ class AutomationGUI:
                                                     """, text_input)
                                                     retry_send_success = True
                                                 except Exception as e:
-                                                    self.status_queue.put(f"⚠️ [DEBUG] リトライ {retry_attempt + 1}: 方法4失敗: {e}")
+                                                    self.status_queue.put(f"⚠️ [DEBUG] リトライ {retry_attempt + 1}: 方法5失敗: {e}")
                                             
                                             if not retry_send_success:
                                                 self.status_queue.put(f"❌ [ERROR] リトライ {retry_attempt + 1}: すべての送信方法が失敗")
