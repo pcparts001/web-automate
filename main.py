@@ -29,6 +29,7 @@ class ChromeAutomationTool:
         self.driver = None
         self.wait = None
         self.debug = debug
+        self.prompt_counter = 0  # プロンプトカウンター
         self.setup_logging()
         
     def setup_logging(self):
@@ -775,8 +776,9 @@ class ChromeAutomationTool:
     
     def save_to_markdown(self, text, prompt):
         """テキストをMarkdownファイルに保存"""
+        self.prompt_counter += 1
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"output_{timestamp}.md"
+        filename = f"output_{self.prompt_counter:03d}_{timestamp}.md"
         
         output_dir = Path("outputs")
         output_dir.mkdir(exist_ok=True)
@@ -784,17 +786,18 @@ class ChromeAutomationTool:
         filepath = output_dir / filename
         
         with open(filepath, 'w', encoding='utf-8') as f:
-            f.write(f"# 自動取得結果\\n\\n")
+            f.write(f"# 自動取得結果 #{self.prompt_counter}\\n\\n")
             f.write(f"**日時**: {datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}\\n\\n")
             f.write(f"**プロンプト**: {prompt}\\n\\n")
             f.write(f"---\\n\\n")
             f.write(text)
             
         self.logger.info(f"ファイルを保存しました: {filepath}")
+        print(f"📁 応答をファイルに保存しました: {filename}")
         return filepath
     
-    def process_site(self, prompt_text):
-        """サイトを処理（メイン処理）"""
+    def process_single_prompt(self, prompt_text):
+        """単一のプロンプトを処理（メイン処理）"""
         max_retries = 10
         retry_count = 0
         
@@ -855,6 +858,59 @@ class ChromeAutomationTool:
                     
         self.logger.error(f"最大試行回数({max_retries})に達しました")
         return False
+
+    def process_continuous_prompts(self):
+        """継続的にプロンプトを処理する"""
+        prompt_count = 0
+        
+        while True:
+            try:
+                prompt_count += 1
+                print(f"\n=== プロンプト {prompt_count} ===")
+                print("送信するプロンプトを入力してください:")
+                print("（終了したい場合は 'quit' または 'exit' と入力してください）")
+                
+                prompt = input("プロンプト: ").strip()
+                
+                # 終了コマンドをチェック
+                if prompt.lower() in ['quit', 'exit', '終了', 'q']:
+                    print("プロンプト送信を終了します。")
+                    break
+                
+                if not prompt:
+                    print("空のプロンプトです。再度入力してください。")
+                    continue
+                
+                # プロンプトを処理
+                print(f"\nプロンプト {prompt_count} を送信中...")
+                success = self.process_single_prompt(prompt)
+                
+                if success:
+                    print(f"✅ プロンプト {prompt_count} の応答が正常に保存されました！")
+                else:
+                    print(f"❌ プロンプト {prompt_count} の処理中にエラーが発生しました")
+                    
+                    # エラー時の対応を確認
+                    retry_input = input("再試行しますか？ (y/n): ").strip().lower()
+                    if retry_input in ['y', 'yes', 'はい']:
+                        prompt_count -= 1  # カウントを戻す
+                        continue
+                    else:
+                        break
+                        
+            except KeyboardInterrupt:
+                print("\n\nCtrl+Cが押されました。処理を中断しています...")
+                break
+            except Exception as e:
+                self.logger.error(f"継続処理中のエラー: {e}")
+                print(f"予期しないエラーが発生しました: {e}")
+                
+                retry_input = input("処理を続行しますか？ (y/n): ").strip().lower()
+                if retry_input not in ['y', 'yes', 'はい']:
+                    break
+        
+        print(f"\n🎉 合計 {prompt_count - 1} 個のプロンプトを処理しました。")
+        return True
     
     def close(self):
         """ブラウザを閉じる"""
@@ -884,16 +940,11 @@ def main():
         # ユーザーが手動でサイトを開くまで待機
         tool.wait_for_user_navigation()
         
-        # プロンプトを入力
-        prompt = input("送信するプロンプトを入力してください: ")
+        print("\n🚀 Chrome自動操作ツールが準備完了しました！")
+        print("継続的にプロンプトを送信し、応答を保存します。")
         
-        # サイトを処理
-        success = tool.process_site(prompt)
-        
-        if success:
-            print("処理が正常に完了しました！")
-        else:
-            print("処理中にエラーが発生しました")
+        # 継続的なプロンプト処理を開始
+        tool.process_continuous_prompts()
             
     except KeyboardInterrupt:
         print("\\n処理を中断しました")
