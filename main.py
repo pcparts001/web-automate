@@ -337,13 +337,36 @@ class ChromeAutomationTool:
         return False
     
     def find_regenerate_button(self):
-        """応答を再生成ボタンを探す（改善版）"""
+        """応答を再生成ボタンを探す（改善版・デバッグ強化）"""
+        self.logger.info("=== 再生成ボタン検索開始 ===")
+        
+        # まず全体的なデバッグ情報を取得
+        try:
+            all_retry_elements = self.driver.find_elements(By.CSS_SELECTOR, "*[class*='retry']")
+            self.logger.info(f"retry関連要素を{len(all_retry_elements)}個発見")
+            
+            for i, elem in enumerate(all_retry_elements):
+                if elem.is_displayed():
+                    class_attr = elem.get_attribute("class") or ""
+                    tag_name = elem.tag_name
+                    text_content = elem.text.strip()[:100]
+                    self.logger.info(f"retry要素{i+1}: <{tag_name}> class='{class_attr}' text='{text_content}'")
+        except Exception as e:
+            self.logger.debug(f"retry要素デバッグエラー: {e}")
+        
         # HTMLから分析した具体的なセレクター
         selectors = [
-            # Genspark.ai固有の構造
+            # Genspark.ai固有の構造（Vue.js動的属性対応）
             ".bubble.retry .button",
-            ".bubble.retry div.button",
+            ".bubble.retry div.button", 
             ".bubble[class*='retry'] .button",
+            ".bubble[class*='retry'] div.button",
+            "[class*='bubble'][class*='retry'] .button",
+            "[class*='bubble'][class*='retry'] div.button",
+            # より具体的な構造
+            ".bubble.retry .right .button",
+            ".retry .right .button",
+            "[class*='retry'] [class*='right'] [class*='button']",
             # テキストベースの検索
             "//*[contains(text(), '応答を再生成')]",
             "//*[contains(text(), '再生成')]", 
@@ -356,7 +379,8 @@ class ChromeAutomationTool:
             "button[title*='再生成']",
             # より幅広い検索
             ".retry .button",
-            "div.button[class*='retry']"
+            "div.button[class*='retry']",
+            "*[class*='retry'] *[class*='button']"
         ]
         
         for selector in selectors:
@@ -366,40 +390,69 @@ class ChromeAutomationTool:
                 else:
                     elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
                 
+                self.logger.debug(f"セレクター '{selector}': {len(elements)}個の要素を発見")
+                
                 # 表示されているボタンを探す
-                for element in elements:
-                    if element.is_displayed():
+                for i, element in enumerate(elements):
+                    try:
+                        is_displayed = element.is_displayed()
                         button_text = element.text.strip()
-                        self.logger.info(f"再生成ボタンを発見: '{button_text}' (セレクター: {selector})")
+                        tag_name = element.tag_name
+                        class_attr = element.get_attribute("class") or ""
                         
-                        # 「応答を再生成」テキストを含むかチェック
-                        if "再生成" in button_text or "regenerate" in button_text.lower():
-                            self.logger.info(f"✓ 有効な再生成ボタンを確認: '{button_text}'")
-                            return element
-                        else:
-                            self.logger.debug(f"テキストが一致しない: '{button_text}'")
+                        self.logger.debug(f"  要素{i+1}: <{tag_name}> class='{class_attr}' displayed={is_displayed} text='{button_text}'")
+                        
+                        if is_displayed and button_text:
+                            self.logger.info(f"表示中の要素発見: '{button_text}' (セレクター: {selector})")
+                            
+                            # 「応答を再生成」テキストを含むかチェック
+                            if "再生成" in button_text or "regenerate" in button_text.lower():
+                                self.logger.info(f"✓ 有効な再生成ボタンを確認: '{button_text}'")
+                                return element
+                            else:
+                                self.logger.debug(f"テキストが一致しない: '{button_text}'")
+                    except Exception as e:
+                        self.logger.debug(f"要素処理エラー: {e}")
                         
             except Exception as e:
                 self.logger.debug(f"再生成ボタン検索エラー ({selector}): {e}")
                 continue
         
         # 最後の手段: retry クラスを持つ要素内で「応答を再生成」テキストを含む要素を探す
+        self.logger.info("=== フォールバック検索開始 ===")
         try:
-            retry_elements = self.driver.find_elements(By.CSS_SELECTOR, ".retry")
-            for retry_element in retry_elements:
+            retry_elements = self.driver.find_elements(By.CSS_SELECTOR, "*[class*='retry']")
+            self.logger.info(f"フォールバック: {len(retry_elements)}個のretry要素を発見")
+            
+            for i, retry_element in enumerate(retry_elements):
                 if retry_element.is_displayed():
                     all_text = retry_element.text
-                    if "応答を再生成" in all_text:
+                    self.logger.info(f"retry要素{i+1}のテキスト: '{all_text}'")
+                    
+                    if "応答を再生成" in all_text or "再生成" in all_text:
+                        self.logger.info(f"✓ retry要素{i+1}に再生成テキストを発見")
+                        
                         # retry要素内のボタンやクリック可能な要素を探す
-                        clickable_elements = retry_element.find_elements(By.CSS_SELECTOR, ".button, button, div[class*='button'], [role='button']")
-                        for clickable in clickable_elements:
-                            if clickable.is_displayed() and "再生成" in clickable.text:
-                                self.logger.info(f"✓ retry要素内で再生成ボタンを発見: '{clickable.text}'")
-                                return clickable
+                        clickable_selectors = [".button", "button", "div[class*='button']", "[role='button']", "div", "span"]
+                        
+                        for cs in clickable_selectors:
+                            clickable_elements = retry_element.find_elements(By.CSS_SELECTOR, cs)
+                            for j, clickable in enumerate(clickable_elements):
+                                try:
+                                    if clickable.is_displayed():
+                                        clickable_text = clickable.text.strip()
+                                        clickable_class = clickable.get_attribute("class") or ""
+                                        self.logger.debug(f"    クリック候補{j+1}: text='{clickable_text}' class='{clickable_class}'")
+                                        
+                                        if "再生成" in clickable_text:
+                                            self.logger.info(f"✓ retry要素内で再生成ボタンを発見: '{clickable_text}'")
+                                            return clickable
+                                except Exception as e:
+                                    self.logger.debug(f"clickable要素処理エラー: {e}")
         except Exception as e:
             self.logger.debug(f"retry要素検索エラー: {e}")
                 
-        self.logger.debug("再生成ボタンが見つかりません")
+        self.logger.warning("再生成ボタンが見つかりません")
         return None
 
     def handle_regenerate_with_retry(self, max_retries=5):
