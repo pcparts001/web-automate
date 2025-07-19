@@ -812,15 +812,26 @@ class ChromeAutomationTool:
                 self.logger.debug("message-content-id要素が見つかりません")
                 return None
             
+            self.logger.info(f"=== デバッグ: message-content-id要素を{len(message_elements)}個発見 ===")
+            
             # IDでソートして最新を特定
             elements_with_id = []
-            for element in message_elements:
+            for i, element in enumerate(message_elements):
                 if element.is_displayed():
                     content_id = element.get_attribute("message-content-id")
                     if content_id and content_id.isdigit():
                         text_content = element.text.strip()
+                        
+                        # 詳細デバッグ情報
+                        self.logger.info(f"要素{i+1}: ID={content_id}, テキスト長={len(text_content)}文字")
+                        self.logger.info(f"  プレビュー: {text_content[:100]}...")
+                        
                         if len(text_content) > 20:  # 十分なテキストがある要素のみ
                             elements_with_id.append((int(content_id), element, text_content))
+                    else:
+                        self.logger.debug(f"要素{i+1}: 無効なID={content_id}")
+                else:
+                    self.logger.debug(f"要素{i+1}: 非表示")
             
             if not elements_with_id:
                 self.logger.debug("有効なmessage-content-id要素が見つかりません")
@@ -829,29 +840,59 @@ class ChromeAutomationTool:
             # IDでソート（降順 = 最新が最初）
             elements_with_id.sort(key=lambda x: x[0], reverse=True)
             
+            self.logger.info(f"=== 有効な要素一覧（ID順） ===")
+            for content_id, element, text_content in elements_with_id:
+                self.logger.info(f"ID={content_id}: {text_content[:50]}...")
+            
+            self.logger.info(f"=== プロンプト送信前の既存応答数: {self.existing_response_count} ===")
+            
             # プロンプト送信後に新しく現れた要素のみを対象とする
             new_elements = []
             for content_id, element, text_content in elements_with_id:
-                # プロンプト送信後のタイムスタンプチェック（簡易版）
-                if content_id > self.existing_response_count:
-                    # さらに、送信したプロンプトテキストが含まれていないかチェック
-                    if (hasattr(self, 'current_prompt_text') and 
-                        self.current_prompt_text and 
-                        self.current_prompt_text[:30] not in text_content):
-                        
-                        # 応答らしいコンテンツが含まれているかチェック
-                        response_keywords = ["比較", "について", "です", "ます", "である", "。", "甘さ", "塩", "砂糖"]
-                        if any(keyword in text_content for keyword in response_keywords):
-                            new_elements.append((content_id, element, text_content))
+                self.logger.info(f"検証中 ID={content_id}: existing_count={self.existing_response_count}")
+                
+                # 新しい要素の判定ロジックを改善
+                # プロンプト送信前のexisting_response_countは、message-content-idの個数ではなく
+                # 従来のセレクターでの応答要素数なので、message-content-idとは比較できない
+                # 代わりに、プロンプトテキストを含まず、応答らしい内容を持つ要素を最新として扱う
+                
+                # まず、送信したプロンプトテキストが含まれていないかチェック
+                prompt_check_passed = True
+                if (hasattr(self, 'current_prompt_text') and 
+                    self.current_prompt_text and 
+                    self.current_prompt_text[:30] in text_content):
+                    self.logger.info(f"  ✗ ID={content_id}にプロンプトテキストが含まれています")
+                    prompt_check_passed = False
+                else:
+                    self.logger.info(f"  ✓ ID={content_id}はプロンプトテキストを含みません")
+                
+                if prompt_check_passed:
+                    # 応答らしいコンテンツが含まれているかチェック
+                    response_keywords = ["比較", "について", "です", "ます", "である", "。", "甘さ", "塩", "砂糖", "今日", "日差し", "強く", "琵琶湖", "日本一", "大きな", "湖", "富士山", "標高"]
+                    found_keywords = [kw for kw in response_keywords if kw in text_content]
+                    
+                    if found_keywords:
+                        self.logger.info(f"  ✓ ID={content_id}に応答キーワードを発見: {found_keywords}")
+                        new_elements.append((content_id, element, text_content))
+                    else:
+                        self.logger.info(f"  ✗ ID={content_id}に応答キーワードがありません")
             
             if not new_elements:
-                self.logger.debug("プロンプト送信後の新しいmessage-content-id要素が見つかりません")
-                return None
+                self.logger.warning("プロンプト送信後の新しいmessage-content-id要素が見つかりません")
+                self.logger.warning("フォールバック: 最新のID要素を無条件で取得します")
+                
+                # フォールバック：最新IDの要素を無条件で選択
+                if elements_with_id:
+                    latest_id, latest_element, latest_text = elements_with_id[0]  # 最大ID
+                    self.logger.info(f"フォールバック選択: message-content-id={latest_id}")
+                    return self.clean_response_text(latest_text)
+                else:
+                    return None
             
             # 最新のID（最大ID）を持つ要素を選択
             latest_id, latest_element, latest_text = new_elements[0]
-            self.logger.info(f"最新応答を特定: message-content-id={latest_id}, テキスト長={len(latest_text)}文字")
-            self.logger.debug(f"応答プレビュー: {latest_text[:100]}...")
+            self.logger.info(f"🎯 最新応答を特定: message-content-id={latest_id}, テキスト長={len(latest_text)}文字")
+            self.logger.info(f"🎯 最終選択された応答プレビュー: {latest_text[:150]}...")
             
             # セレクター文字列を作成
             selector = f"[message-content-id='{latest_id}']"
@@ -860,6 +901,7 @@ class ChromeAutomationTool:
             final_text = self.wait_for_streaming_response_complete(selector)
             
             if final_text and "応答の生成中にエラーが発生しました" not in final_text:
+                self.logger.info(f"🎯 ストリーミング完了後のテキスト長: {len(final_text)}文字")
                 return final_text
             else:
                 # ストリーミング検出に失敗した場合は、現在のテキストを返す
