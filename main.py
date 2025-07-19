@@ -1360,7 +1360,7 @@ class ChromeAutomationTool:
             self.logger.warning("再生成ボタンが検出されました - フォールバック処理が必要です")
             return False, "REGENERATE_ERROR_DETECTED"
         
-        self.logger.debug(f"process_single_prompt: response_textの長さ={len(response_text) if response_text else 0}, エラーメッセージなし={("応答の生成中にエラーが発生" not in response_text) if response_text else False}")
+        self.logger.debug(f"process_single_prompt: response_textの長さ={len(response_text) if response_text else 0}, エラーメッセージなし={'応答の生成中にエラーが発生' not in response_text if response_text else False}")
         if response_text and "応答の生成中にエラーが発生" not in response_text:
             filepath = self.save_to_markdown(response_text, prompt_text)
             self.logger.info("処理が正常に完了しました")
