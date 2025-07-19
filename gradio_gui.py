@@ -20,6 +20,22 @@ class AutomationGUI:
         self.current_thread = None
         self.chrome_initialized = False
         
+    def mask_response_for_debug(self, text, max_preview=30):
+        """応答テキストをデバッグ用にマスキング"""
+        if not text:
+            return "None"
+        
+        text = text.strip()
+        if len(text) <= max_preview * 2:
+            # 短いテキストは先頭のみ表示
+            preview = text[:max_preview] + "..." if len(text) > max_preview else text
+            return f"[{len(text)}文字] '{preview}'"
+        else:
+            # 長いテキストは先頭と末尾を表示
+            start = text[:max_preview]
+            end = text[-max_preview:]
+            return f"[{len(text)}文字] '{start}...(({len(text) - max_preview * 2}文字省略))...{end}'"
+        
     def start_automation(self, url, prompt_text, use_fallback, fallback_message, retry_count):
         """自動化プロセスを開始"""
         if self.is_running:
@@ -141,25 +157,43 @@ class AutomationGUI:
                                 # タプルの場合は2番目の要素（応答テキスト）を取得
                                 fallback_response_text = fallback_response_text[1]
                                 
+                            # フォールバック応答の詳細ログ（マスキング済み）
+                            masked_response = self.mask_response_for_debug(fallback_response_text)
+                            self.status_queue.put(f"🔍 [DEBUG] フォールバック応答取得: {masked_response}")
+                            self.status_queue.put(f"🔍 [DEBUG] エラーメッセージ含有: {'応答の生成中にエラーが発生' in fallback_response_text if fallback_response_text else False}")
+                            
                             if fallback_response_text and "応答の生成中にエラーが発生" not in fallback_response_text:
                                 # フォールバック後に再生成ボタンが表示されていないかチェック
+                                self.status_queue.put("🔍 [DEBUG] 2秒待機してから再生成ボタンをチェック...")
                                 time.sleep(2)  # 少し待機してから再生成ボタンをチェック
                                 regenerate_button = self.tool.find_regenerate_button()
+                                self.status_queue.put(f"🔍 [DEBUG] 再生成ボタン検出結果: {bool(regenerate_button)}")
                                 
                                 # 初回フォールバック成功の場合も応答内容を検証
                                 if not regenerate_button:
                                     # 応答内容の検証（連続フォールバック処理と同じロジック）
-                                    if (len(fallback_response_text.strip()) > 20 and
-                                        fallback_message.strip()[:20] not in fallback_response_text):
+                                    response_length = len(fallback_response_text.strip())
+                                    fallback_prefix = fallback_message.strip()[:20]
+                                    is_not_echo = fallback_prefix not in fallback_response_text
+                                    
+                                    self.status_queue.put(f"🔍 [DEBUG] 応答検証: 長さ={response_length}>20, エコーでない={is_not_echo}")
+                                    self.status_queue.put(f"🔍 [DEBUG] フォールバックプレフィクス: '{fallback_prefix}'")
+                                    
+                                    if (response_length > 20 and is_not_echo):
                                         self.status_queue.put("✅ 初回フォールバック成功 - 有効な応答を確認")
                                         self.response_queue.put(fallback_response_text)
                                     else:
-                                        self.status_queue.put(f"⚠️ 初回フォールバック応答が不適切: {len(fallback_response_text.strip())}文字")
+                                        self.status_queue.put(f"⚠️ 初回フォールバック応答が不適切: {response_length}文字, エコーでない={is_not_echo}")
                                         # 応答が不適切な場合は連続フォールバック処理に移行
                                         regenerate_button = True  # 強制的に連続処理モードに入る
+                                        self.status_queue.put("🔍 [DEBUG] 強制的に連続フォールバック処理モードに移行")
                                 
                                 if regenerate_button:
-                                    self.status_queue.put("⚠️ フォールバック後も再生成ボタンが表示 - 連続フォールバック実行開始")
+                                    if isinstance(regenerate_button, bool) and regenerate_button:
+                                        self.status_queue.put("⚠️ 応答検証失敗により連続フォールバック実行開始")
+                                    else:
+                                        self.status_queue.put("⚠️ フォールバック後も再生成ボタンが表示 - 連続フォールバック実行開始")
+                                    self.status_queue.put(f"🔍 [DEBUG] regenerate_button値: {regenerate_button} (型: {type(regenerate_button)})")
                                     
                                     # 連続フォールバック処理を実行（最大20回まで）
                                     max_fallback_retries = getattr(self.tool, 'max_regenerate_retries', 20)
@@ -170,8 +204,10 @@ class AutomationGUI:
                                         self.status_queue.put(f"🔄 フォールバック再実行中 ({retry_attempt + 1}/{max_fallback_retries})...")
                                         
                                         # 再度フォールバックメッセージを送信
+                                        self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: テキスト入力フィールドを検索中...")
                                         text_input = self.tool.find_text_input()
                                         if text_input:
+                                            self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: テキスト入力フィールド取得成功")
                                             # 送信前に現在の応答数を記録（新しい応答検出用）
                                             from selenium.webdriver.common.by import By
                                             current_message_elements = self.tool.driver.find_elements(By.CSS_SELECTOR, "[message-content-id]")
@@ -191,12 +227,19 @@ class AutomationGUI:
                                                 text_input.send_keys(fallback_message.strip())
                                                 
                                             # 送信
+                                            self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 送信ボタンを検索中...")
                                             submit_button = self.tool.find_submit_button()
+                                            self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 送信方法: {submit_button}")
+                                            
                                             if submit_button == "ENTER_KEY":
                                                 from selenium.webdriver.common.keys import Keys
                                                 text_input.send_keys(Keys.RETURN)
+                                                self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: Enterキーで送信完了")
                                             elif submit_button:
                                                 submit_button.click()
+                                                self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: ボタンクリックで送信完了")
+                                            else:
+                                                self.status_queue.put(f"❌ [DEBUG] リトライ {retry_attempt + 1}: 送信ボタンが見つからない")
                                             
                                             # ランダム待機時間（1-5秒）
                                             import random
@@ -205,7 +248,10 @@ class AutomationGUI:
                                             time.sleep(wait_time)
                                             
                                             # 再生成ボタンが消えたかチェック
+                                            self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 再生成ボタンの状態をチェック中...")
                                             regenerate_button_check = self.tool.find_regenerate_button()
+                                            self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 再生成ボタン検出結果: {bool(regenerate_button_check)}")
+                                            
                                             if not regenerate_button_check:
                                                 # 再生成ボタンが消えた - 新しい応答が追加されたかチェック
                                                 current_message_elements = self.tool.driver.find_elements(By.CSS_SELECTOR, "[message-content-id]")
@@ -218,22 +264,33 @@ class AutomationGUI:
                                                     if isinstance(final_fallback_response, tuple):
                                                         final_fallback_response = final_fallback_response[1]
                                                     
-                                                    # 応答内容の検証を強化
-                                                    if (final_fallback_response and 
-                                                        "応答の生成中にエラーが発生" not in final_fallback_response and 
-                                                        len(final_fallback_response.strip()) > 50 and
-                                                        fallback_message.strip()[:20] not in final_fallback_response):  # フォールバックメッセージ自体でない
+                                                                    # 応答内容の検証を強化（デバッグログ付き）
+                                                    final_masked = self.mask_response_for_debug(final_fallback_response)
+                                                    self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 最終応答 = {final_masked}")
+                                                    
+                                                    has_error = "応答の生成中にエラーが発生" in final_fallback_response if final_fallback_response else False
+                                                    is_long_enough = len(final_fallback_response.strip()) > 50 if final_fallback_response else False
+                                                    is_not_echo = fallback_message.strip()[:20] not in final_fallback_response if final_fallback_response else False
+                                                    
+                                                    self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: エラーなし={not has_error}, 十分な長さ={is_long_enough}, エコーでない={is_not_echo}")
+                                                    
+                                                    if (final_fallback_response and not has_error and is_long_enough and is_not_echo):
                                                         
                                                         self.status_queue.put(f"✅ フォールバック再実行成功: 新しい応答を検出 ({retry_attempt + 1}回目)")
                                                         self.response_queue.put(final_fallback_response)
                                                         fallback_success = True
                                                         break
                                                     else:
-                                                        self.status_queue.put(f"⚠️ 新しい応答はあるが内容が不適切 ({retry_attempt + 1}回目): {len(final_fallback_response.strip()) if final_fallback_response else 0}文字")
+                                                        response_length = len(final_fallback_response.strip()) if final_fallback_response else 0
+                                                        self.status_queue.put(f"⚠️ 新しい応答はあるが内容が不適切 ({retry_attempt + 1}回目): {response_length}文字")
                                                 else:
                                                     self.status_queue.put(f"⚠️ 再生成ボタンは消えたが新しい応答が追加されていない ({retry_attempt + 1}回目)")
                                             else:
                                                 self.status_queue.put(f"⚠️ フォールバック再実行 {retry_attempt + 1} 回目: まだ再生成ボタンが表示中")
+                                                self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 次のリトライに進みます")
+                                        else:
+                                            self.status_queue.put(f"❌ [DEBUG] リトライ {retry_attempt + 1}: テキスト入力フィールドが見つからない - リトライ終了")
+                                            break
                                         
                                         # ループが完了したかチェック（break で抜けた場合はこの処理は実行されない）
                                         if retry_attempt == max_fallback_retries - 1:  # 最後の試行

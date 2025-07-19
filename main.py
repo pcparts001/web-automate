@@ -36,6 +36,22 @@ class ChromeAutomationTool:
         self.current_retry_count = 0  # 現在のリトライ回数
         self.max_regenerate_retries = 5  # 最大リトライ回数
         self.setup_logging()
+    
+    def mask_text_for_debug(self, text, max_preview=30):
+        """テキストをデバッグ用にマスキング"""
+        if not text:
+            return "None"
+        
+        text = str(text).strip()
+        if len(text) <= max_preview * 2:
+            # 短いテキストは先頭のみ表示
+            preview = text[:max_preview] + "..." if len(text) > max_preview else text
+            return f"[{len(text)}文字] '{preview}'"
+        else:
+            # 長いテキストは先頭と末尾を表示
+            start = text[:max_preview]
+            end = text[-max_preview:]
+            return f"[{len(text)}文字] '{start}...(({len(text) - max_preview * 2}文字省略))...{end}'"
         
     def setup_logging(self):
         """ログ設定"""
@@ -340,7 +356,12 @@ class ChromeAutomationTool:
     
     def find_regenerate_button(self):
         """応答を再生成ボタンを探す（改善版・デバッグ強化）"""
-        self.logger.info("=== 再生成ボタン検索開始 ===")
+        # グローバルカウンターを初期化（なければ）
+        if not hasattr(self, '_regenerate_button_call_count'):
+            self._regenerate_button_call_count = 0
+        self._regenerate_button_call_count += 1
+        
+        self.logger.info(f"=== 再生成ボタン検索開始 (呼び出し{self._regenerate_button_call_count}回目) ===")
         
         # まず全体的なデバッグ情報を取得
         try:
@@ -489,7 +510,7 @@ class ChromeAutomationTool:
         except Exception as e:
             self.logger.debug(f"retry要素検索エラー: {e}")
                 
-        self.logger.warning("再生成ボタンが見つかりません")
+        self.logger.warning(f"再生成ボタンが見つかりません (呼び出し{self._regenerate_button_call_count}回目)")
         return None
 
     def handle_regenerate_with_retry(self, max_retries=5):
@@ -1153,8 +1174,8 @@ class ChromeAutomationTool:
             
             # 最新のID（最大ID）を持つ要素を選択
             latest_id, latest_element, latest_text = new_elements[0]
-            self.logger.info(f"🎯 最新応答を特定: message-content-id={latest_id}, テキスト長={len(latest_text)}文字")
-            self.logger.info(f"🎯 最終選択された応答プレビュー: {latest_text[:150]}...")
+            masked_response = self.mask_text_for_debug(latest_text)
+            self.logger.info(f"🎯 最新応答を特定: message-content-id={latest_id}, 応答内容={masked_response}")
             
             # セレクター文字列を作成
             selector = f"[message-content-id='{latest_id}']"
@@ -1169,7 +1190,8 @@ class ChromeAutomationTool:
                     self.logger.warning(f"再生成エラーが検出されました - リトライが必要です ({self.current_retry_count}回目)")
                     return None
                 elif final_text and "応答の生成中にエラーが発生しました" not in final_text:
-                    self.logger.info(f"🎯 ストリーミング完了後のテキスト長: {len(final_text)}文字")
+                    masked_final = self.mask_text_for_debug(final_text)
+                    self.logger.info(f"🎯 ストリーミング完了後: {masked_final}")
                     return final_text
                 else:
                     # ストリーミング検出に失敗した場合は、現在のテキストを返す
@@ -1177,7 +1199,8 @@ class ChromeAutomationTool:
                     return self.clean_response_text(latest_text)
             else:
                 # ストリーミング待機をスキップして現在のテキストを返す
-                self.logger.info(f"🎯 ストリーミング待機をスキップ - 現在のテキスト長: {len(latest_text)}文字")
+                skip_masked = self.mask_text_for_debug(latest_text)
+                self.logger.info(f"🎯 ストリーミング待機をスキップ - {skip_masked}")
                 return self.clean_response_text(latest_text)
                 
         except Exception as e:
