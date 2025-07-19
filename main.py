@@ -1258,6 +1258,7 @@ class ChromeAutomationTool:
     
     def save_to_markdown(self, text, prompt):
         """テキストをMarkdownファイルに保存"""
+        self.logger.debug(f"save_to_markdown: 保存テキスト長={len(text)}文字, プロンプト={self.mask_text_for_debug(prompt)}")
         self.prompt_counter += 1
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"output_{self.prompt_counter:03d}_{timestamp}.md"
@@ -1266,6 +1267,7 @@ class ChromeAutomationTool:
         output_dir.mkdir(exist_ok=True)
         
         filepath = output_dir / filename
+        self.logger.info(f"save_to_markdown: 保存先ファイルパス: {filepath}")
         
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(f"# 自動取得結果 #{self.prompt_counter}\n\n")
@@ -1381,11 +1383,12 @@ class ChromeAutomationTool:
         
         self.logger.debug(f"process_single_prompt: response_textの長さ={len(response_text) if response_text else 0}, エラーメッセージなし={'応答の生成中にエラーが発生' not in response_text if response_text else False}")
         if response_text and "応答の生成中にエラーが発生" not in response_text:
+            self.logger.debug(f"process_single_prompt: ファイル保存条件を満たしました。response_textの長さ={len(response_text)}")
             filepath = self.save_to_markdown(response_text, prompt_text)
             self.logger.info("処理が正常に完了しました")
             return True, response_text
         else:
-            self.logger.warning(f"応答テキストが取得できませんでした: {response_text}")
+            self.logger.warning(f"process_single_prompt: ファイル保存条件を満たしませんでした。response_text={self.mask_text_for_debug(response_text) if response_text else 'None'}, エラーメッセージ有無={("応答の生成中にエラーが発生" in response_text) if response_text else False}")
             # デバッグ情報を出力してページ構造を確認
             self.debug_page_structure()
             return False, response_text
