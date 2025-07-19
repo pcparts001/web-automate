@@ -411,31 +411,21 @@ class ChromeAutomationTool:
         except Exception as e:
             self.logger.debug(f"retry要素デバッグエラー: {e}")
         
-        # HTMLから分析した具体的なセレクター（優先順位順）
+        # HTMLから分析した具体的なセレクター（実際の構造に基づく）
         selectors = [
-            # 最も優先: 明確に「応答を再生成」テキストを含む要素
+            # 最も優先: 完全一致
+            "//div[@class='button' and contains(text(), '応答を再生成')]",
+            # Vue.js動的属性対応（data-v-で始まる属性を持つdiv.button）
+            "//div[contains(@class, 'button') and contains(text(), '応答を再生成')]",
+            "//div[starts-with(@data-v-, '') and @class='button' and contains(text(), '応答を再生成')]",
+            # より広範囲
+            "//div[contains(text(), '応答を再生成')]",
             "//*[contains(text(), '応答を再生成')]",
-            "//*[contains(text(), '再生成')]", 
-            # Genspark.ai固有の構造（Vue.js動的属性対応）
-            ".bubble.retry .button",
-            ".bubble.retry div.button", 
-            ".bubble[class*='retry'] .button",
-            ".bubble[class*='retry'] div.button",
-            "[class*='bubble'][class*='retry'] .button",
-            "[class*='bubble'][class*='retry'] div.button",
-            # より具体的な構造
-            ".bubble.retry .right .button",
-            ".retry .right .button",
-            "[class*='retry'] [class*='right'] [class*='button']",
-            # 一般的なセレクター
-            ".regenerate-button",
-            "[class*='regenerate']",
-            "button[aria-label*='再生成']",
-            "button[title*='再生成']",
-            # より幅広い検索
-            ".retry .button",
-            "div.button[class*='retry']",
-            "*[class*='retry'] *[class*='button']"
+            "//*[contains(text(), '再生成')]",
+            # CSS セレクター（フォールバック）
+            "div.button",
+            ".button",
+            "[class*='button']"
         ]
         
         for selector in selectors:
