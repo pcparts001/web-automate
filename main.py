@@ -17,6 +17,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from webdriver_manager.chrome import ChromeDriverManager
+import platform
 
 
 class ChromeAutomationTool:
@@ -50,7 +51,24 @@ class ChromeAutomationTool:
             chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
             chrome_options.add_experimental_option('useAutomationExtension', False)
             
-            service = Service(ChromeDriverManager().install())
+            # プラットフォームに応じたChromeDriverManagerの設定
+            system = platform.system()
+            machine = platform.machine()
+            
+            if system == "Darwin" and machine == "arm64":
+                # Mac M1/M2の場合
+                chrome_driver_path = ChromeDriverManager(os_type="mac-arm64").install()
+            elif system == "Darwin":
+                # Intel Macの場合
+                chrome_driver_path = ChromeDriverManager(os_type="mac64").install()
+            elif system == "Linux":
+                # Linuxの場合
+                chrome_driver_path = ChromeDriverManager(os_type="linux64").install()
+            else:
+                # その他のプラットフォーム（自動検出）
+                chrome_driver_path = ChromeDriverManager().install()
+                
+            service = Service(chrome_driver_path)
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
             self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
             
