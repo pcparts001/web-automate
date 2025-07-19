@@ -195,12 +195,13 @@ class AutomationGUI:
                                 except Exception as e:
                                     self.status_queue.put(f"⚠️ [DEBUG] 方法3失敗: {e}")
                             
-                            # 方法4: JavaScript Enterキーイベント発火
+                            # 方法5: JavaScript Enterキーイベント発火（最終手段）
                             if not send_success:
                                 try:
+                                    self.status_queue.put("🔍 [DEBUG] 方法5: JavaScriptキーボードイベントで送信実行")
                                     self.tool.driver.execute_script("""
                                         const input = arguments[0];
-                                        const event = new KeyboardEvent('keypress', {
+                                        const event = new KeyboardEvent('keydown', {
                                             key: 'Enter',
                                             code: 'Enter',
                                             keyCode: 13,
@@ -210,10 +211,9 @@ class AutomationGUI:
                                         });
                                         input.dispatchEvent(event);
                                     """, text_input)
-                                    self.status_queue.put("🔍 [DEBUG] 方法4: JavaScriptキーボードイベントで送信実行")
                                     send_success = True
                                 except Exception as e:
-                                    self.status_queue.put(f"⚠️ [DEBUG] 方法4失敗: {e}")
+                                    self.status_queue.put(f"⚠️ [DEBUG] 方法5失敗: {e}")
                             
                             if not send_success:
                                 self.status_queue.put("❌ [ERROR] すべての送信方法が失敗しました")
@@ -358,12 +358,13 @@ class AutomationGUI:
                                                 except Exception as e:
                                                     self.status_queue.put(f"⚠️ [DEBUG] リトライ {retry_attempt + 1}: 方法2.5失敗: {e}")
                                             
-                                            # 方法3: JavaScript Enterキーイベント
+                                            # 方法4: JavaScript Enterキーイベント（最終手段）
                                             if not retry_send_success:
                                                 try:
+                                                    self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 方法4 JavaScriptキーボードイベント実行")
                                                     self.tool.driver.execute_script("""
                                                         const input = arguments[0];
-                                                        const event = new KeyboardEvent('keypress', {
+                                                        const event = new KeyboardEvent('keydown', {
                                                             key: 'Enter',
                                                             code: 'Enter',
                                                             keyCode: 13,
@@ -373,10 +374,9 @@ class AutomationGUI:
                                                         });
                                                         input.dispatchEvent(event);
                                                     """, text_input)
-                                                    self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 方法3JavaScript成功")
                                                     retry_send_success = True
                                                 except Exception as e:
-                                                    self.status_queue.put(f"⚠️ [DEBUG] リトライ {retry_attempt + 1}: 方法3失敗: {e}")
+                                                    self.status_queue.put(f"⚠️ [DEBUG] リトライ {retry_attempt + 1}: 方法4失敗: {e}")
                                             
                                             if not retry_send_success:
                                                 self.status_queue.put(f"❌ [ERROR] リトライ {retry_attempt + 1}: すべての送信方法が失敗")
