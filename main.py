@@ -421,9 +421,41 @@ class ChromeAutomationTool:
                 self.logger.debug(f"再生成ボタン検索エラー ({selector}): {e}")
                 continue
         
-        # 最後の手段: retry クラスを持つ要素内で「応答を再生成」テキストを含む要素を探す
+        # 最後の手段: 「応答を再生成」テキストを含むすべての要素を直接検索
         self.logger.info("=== フォールバック検索開始 ===")
         try:
+            # 「応答を再生成」テキストを含む要素を直接検索
+            regenerate_text_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), '応答を再生成')]")
+            self.logger.info(f"フォールバック: {len(regenerate_text_elements)}個の「応答を再生成」テキスト要素を発見")
+            
+            for i, elem in enumerate(regenerate_text_elements):
+                if elem.is_displayed():
+                    elem_text = elem.text.strip()
+                    self.logger.info(f"再生成テキスト要素{i+1}: '{elem_text}' (タグ: {elem.tag_name})")
+                    
+                    # この要素またはその親要素でクリック可能なものを探す
+                    clickable_candidates = [elem]
+                    
+                    # 親要素も候補に追加
+                    try:
+                        parent = elem.find_element(By.XPATH, "..")
+                        clickable_candidates.append(parent)
+                        # さらに上の親も
+                        grandparent = parent.find_element(By.XPATH, "..")
+                        clickable_candidates.append(grandparent)
+                    except:
+                        pass
+                    
+                    for candidate in clickable_candidates:
+                        try:
+                            # クリック可能かテスト
+                            if candidate.is_displayed() and candidate.is_enabled():
+                                self.logger.info(f"✓ クリック可能な再生成要素を発見: {candidate.tag_name}")
+                                return candidate
+                        except:
+                            continue
+            
+            # 従来のretry要素検索もフォールバックとして実行
             retry_elements = self.driver.find_elements(By.CSS_SELECTOR, "*[class*='retry']")
             self.logger.info(f"フォールバック: {len(retry_elements)}個のretry要素を発見")
             
@@ -674,8 +706,8 @@ class ChromeAutomationTool:
                 # 「応答を再生成」メッセージの検出（エラー状態）
                 if "応答を再生成" in current_text or "再生成" in current_text:
                     self.logger.warning(f"再生成メッセージを検出 - エラー状態: '{current_text[:100]}'")
-                    # エラー状態なので None を返してリトライを促す
-                    return None
+                    # エラー状態として特別なフラグを返す
+                    return "REGENERATE_ERROR_DETECTED"
                 
                 # 生成中フラグを初期化
                 is_still_generating = False
@@ -1103,7 +1135,11 @@ class ChromeAutomationTool:
             # ストリーミング応答の完了を待機
             final_text = self.wait_for_streaming_response_complete(selector)
             
-            if final_text and "応答の生成中にエラーが発生しました" not in final_text:
+            if final_text == "REGENERATE_ERROR_DETECTED":
+                # 再生成エラーが検出された場合はNoneを返してリトライを促す
+                self.logger.warning("再生成エラーが検出されました - リトライが必要です")
+                return None
+            elif final_text and "応答の生成中にエラーが発生しました" not in final_text:
                 self.logger.info(f"🎯 ストリーミング完了後のテキスト長: {len(final_text)}文字")
                 return final_text
             else:
@@ -1384,29 +1420,75 @@ class ChromeAutomationTool:
         self.prompt_send_time = time.time()  # プロンプト送信時刻を記録
         self.logger.info(f"プロンプト送信前 - 既存応答数: {self.existing_response_count}, 既存コピーボタン数: {self.existing_copy_button_count}")
         
-        # テキスト入力フィールドを探す
-        text_input = self.find_text_input()
+        # テキスト入力フィールドを探す（リトライ機能付き）
+        text_input = None
+        max_input_retries = 3
+        
+        for retry in range(max_input_retries):
+            try:
+                text_input = self.find_text_input()
+                if text_input:
+                    # 要素が利用可能かテスト
+                    text_input.is_displayed()
+                    break
+                else:
+                    self.logger.warning(f"テキスト入力フィールド検索リトライ {retry + 1}/{max_input_retries}")
+                    time.sleep(2)
+            except Exception as e:
+                self.logger.warning(f"テキスト入力フィールド取得エラー（リトライ {retry + 1}/{max_input_retries}）: {e}")
+                time.sleep(2)
+                
         if not text_input:
-            self.logger.error("テキスト入力フィールドが見つかりません")
+            self.logger.error("テキスト入力フィールドが見つかりません（リトライ後）")
             return False
             
-        # プロンプトを入力
-        text_input.clear()
-        text_input.send_keys(prompt_text)
-        self.logger.info(f"プロンプトを入力: {prompt_text[:50]}...")
+        # プロンプトを入力（複数行対応）
+        try:
+            text_input.clear()
+            # 複数行テキストの場合、JavaScriptで設定する方が確実
+            if '\n' in prompt_text:
+                self.logger.info("複数行プロンプトをJavaScriptで設定中...")
+                # JavaScriptでvalueを直接設定
+                escaped_text = prompt_text.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+                self.driver.execute_script(f'arguments[0].value = "{escaped_text}";', text_input)
+                # inputイベントを発火
+                self.driver.execute_script('arguments[0].dispatchEvent(new Event("input", { bubbles: true }));', text_input)
+            else:
+                text_input.send_keys(prompt_text)
+            
+            self.logger.info(f"プロンプトを入力: {prompt_text[:50]}...")
+        except Exception as e:
+            self.logger.error(f"プロンプト入力エラー: {e}")
+            return False
         
-        # 送信ボタンをクリック
-        submit_button = self.find_submit_button()
-        if submit_button == "ENTER_KEY":
-            # Enterキーを送信
-            from selenium.webdriver.common.keys import Keys
-            text_input.send_keys(Keys.RETURN)
-            self.logger.info("Enterキーで送信しました")
-        elif submit_button:
-            submit_button.click()
-            self.logger.info("送信ボタンをクリックしました")
-        else:
-            self.logger.error("送信ボタンが見つかりません")
+        # 送信ボタンをクリック（リトライ機能付き）
+        submit_success = False
+        max_submit_retries = 3
+        
+        for retry in range(max_submit_retries):
+            try:
+                submit_button = self.find_submit_button()
+                if submit_button == "ENTER_KEY":
+                    # Enterキーを送信
+                    from selenium.webdriver.common.keys import Keys
+                    text_input.send_keys(Keys.RETURN)
+                    self.logger.info("Enterキーで送信しました")
+                    submit_success = True
+                    break
+                elif submit_button:
+                    submit_button.click()
+                    self.logger.info("送信ボタンをクリックしました")
+                    submit_success = True
+                    break
+                else:
+                    self.logger.warning(f"送信ボタン検索リトライ {retry + 1}/{max_submit_retries}")
+                    time.sleep(2)
+            except Exception as e:
+                self.logger.warning(f"送信ボタンクリックエラー（リトライ {retry + 1}/{max_submit_retries}）: {e}")
+                time.sleep(2)
+                
+        if not submit_success:
+            self.logger.error("送信ボタンが見つかりません（リトライ後）")
             return False
             
         # 少し待機してから応答をチェック
@@ -1419,15 +1501,15 @@ class ChromeAutomationTool:
         
         # 正常な応答テキストを取得
         response_text = self.get_response_text()
-        if response_text:
+        if response_text and response_text != "REGENERATE_ERROR_DETECTED":
             filepath = self.save_to_markdown(response_text, prompt_text)
             self.logger.info("処理が正常に完了しました")
-            return True
+            return True, response_text  # GUIのために応答テキストも返す
         else:
             self.logger.warning("応答テキストが取得できませんでした")
             # デバッグ情報を出力してページ構造を確認
             self.debug_page_structure()
-            return False
+            return False, None
 
     def process_continuous_prompts(self):
         """継続的にプロンプトを処理する"""
@@ -1453,7 +1535,7 @@ class ChromeAutomationTool:
                 
                 # プロンプトを処理
                 print(f"\nプロンプト {prompt_count} を送信中...")
-                success = self.process_single_prompt(prompt)
+                success, response_text = self.process_single_prompt(prompt)
                 
                 if success:
                     print(f"✅ プロンプト {prompt_count} の応答が正常に保存されました！")
