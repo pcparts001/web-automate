@@ -1177,8 +1177,10 @@ class ChromeAutomationTool:
                             self.logger.info(f"  ✗ Thinking中のため除外: {text_content[:50]}...")
 
                         if is_thinking_or_error:
+                            self.logger.debug(f"  要素{i+1}: ID={content_id}はThinking/エラーのためスキップ")
                             continue
                         
+                        self.logger.debug(f"  要素{i+1}: ID={content_id}をelements_with_idに追加 (Thinking/エラーなし)")
                         elements_with_id.append((int(content_id), element, text_content))
                     else:
                         self.logger.debug(f"要素{i+1}: 無効なID={content_id}")
@@ -1208,7 +1210,9 @@ class ChromeAutomationTool:
 
             for content_id, element, text_content in elements_with_id:
                 # プロンプトと完全一致する場合のみ除外する
-                if text_content.strip() in prompt_texts_to_check:
+                is_prompt_match = text_content.strip() in prompt_texts_to_check
+                self.logger.debug(f"  要素ID={content_id}: プロンプトと一致={is_prompt_match}, テキスト長={len(text_content)}")
+                if is_prompt_match:
                     self.logger.info(f"  ✗ ID={content_id}は送信したプロンプトと完全一致するため除外")
                     continue
                 
