@@ -31,6 +31,7 @@ class ChromeAutomationTool:
         self.debug = debug
         self.prompt_counter = 0  # プロンプトカウンター
         self.existing_response_count = 0  # プロンプト送信前の既存応答数
+        self.existing_copy_button_count = 0  # プロンプト送信前の既存コピーボタン数
         self.setup_logging()
         
     def setup_logging(self):
@@ -502,19 +503,20 @@ class ChromeAutomationTool:
                 # 生成中フラグを初期化
                 is_still_generating = False
                 
-                # Genspark.ai固有の完了判定：「コピー」ボタンの検出
+                # Genspark.ai固有の完了判定：送信したプロンプト後の「コピー」ボタンの検出
                 try:
-                    copy_buttons = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'コピー') or contains(text(), 'Copy')]")
-                    visible_copy_buttons = [btn for btn in copy_buttons if btn.is_displayed()]
+                    prompt_based_copy_detected = self.check_copy_button_after_current_prompt()
                     
-                    if visible_copy_buttons and current_length > 100:  # コピーボタンがあり、十分なテキストがある
+                    if prompt_based_copy_detected and current_length > 100:  # プロンプト後にコピーボタンがあり、十分なテキストがある
+                        self.logger.info(f"送信したプロンプト後のコピーボタンを検出 - 応答完了と判定")
+                        
                         # 「コピー」以下のテキストを除去
                         cleaned_text = self.clean_response_text(current_text)
-                        self.logger.info(f"コピーボタンを検出 - 応答完了と判定（{len(cleaned_text)}文字、クリーンアップ済み）")
+                        self.logger.info(f"プロンプト後コピーボタン検出による応答完了（{len(cleaned_text)}文字）")
                         return cleaned_text
                         
                 except Exception as e:
-                    self.logger.debug(f"コピーボタン検出エラー: {e}")
+                    self.logger.debug(f"プロンプト後コピーボタン検出エラー: {e}")
                 
                 # Genspark.ai固有の生成中インジケーター検出
                 genspark_loading_indicators = [
@@ -557,11 +559,10 @@ class ChromeAutomationTool:
                     
                     # 完了判定（より厳密に）
                     if stable_count >= required_stable_count and not is_still_generating and current_length >= minimum_response_length:
-                        # コピーボタンの存在も最終確認
+                        # プロンプト後のコピーボタンの存在を最終確認
                         copy_button_exists = False
                         try:
-                            copy_buttons = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'コピー') or contains(text(), 'Copy')]")
-                            copy_button_exists = any(btn.is_displayed() for btn in copy_buttons)
+                            copy_button_exists = self.check_copy_button_after_current_prompt()
                         except:
                             pass
                         
@@ -657,6 +658,148 @@ class ChromeAutomationTool:
             self.logger.debug(f"既存応答数カウントエラー: {e}")
         
         return max_count
+
+    def count_existing_copy_buttons(self):
+        """既存のコピーボタン数をカウント"""
+        try:
+            copy_buttons = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'コピー') or contains(text(), 'Copy')]")
+            visible_copy_buttons = [btn for btn in copy_buttons if btn.is_displayed()]
+            count = len(visible_copy_buttons)
+            self.logger.debug(f"既存コピーボタン数: {count}")
+            return count
+        except Exception as e:
+            self.logger.debug(f"既存コピーボタン数カウントエラー: {e}")
+            return 0
+
+    def check_copy_button_near_current_response(self, current_element):
+        """現在の応答要素の近くにコピーボタンがあるかチェック"""
+        try:
+            if not current_element:
+                return False
+            
+            # 現在の応答要素の親要素やその周辺でコピーボタンを探す
+            parent_element = current_element
+            
+            # 複数レベルの親要素をチェック
+            for level in range(5):  # 最大5階層上まで確認
+                try:
+                    # 現在の要素内でコピーボタンを探す
+                    copy_buttons_in_area = parent_element.find_elements(By.XPATH, ".//*[contains(text(), 'コピー') or contains(text(), 'Copy')]")
+                    
+                    if copy_buttons_in_area:
+                        # 表示されているコピーボタンがあるかチェック
+                        visible_copies = [btn for btn in copy_buttons_in_area if btn.is_displayed()]
+                        if visible_copies:
+                            self.logger.debug(f"レベル{level}の親要素でコピーボタンを発見: {len(visible_copies)}個")
+                            return True
+                    
+                    # 次の親要素に移動
+                    parent_element = parent_element.find_element(By.XPATH, "..")
+                    
+                except:
+                    break
+            
+            # 応答要素の次の兄弟要素もチェック
+            try:
+                next_siblings = current_element.find_elements(By.XPATH, "./following-sibling::*")
+                for sibling in next_siblings[:3]:  # 最初の3つの兄弟要素をチェック
+                    copy_buttons_in_sibling = sibling.find_elements(By.XPATH, ".//*[contains(text(), 'コピー') or contains(text(), 'Copy')]")
+                    if copy_buttons_in_sibling:
+                        visible_copies = [btn for btn in copy_buttons_in_sibling if btn.is_displayed()]
+                        if visible_copies:
+                            self.logger.debug(f"兄弟要素でコピーボタンを発見: {len(visible_copies)}個")
+                            return True
+            except:
+                pass
+                
+            return False
+            
+        except Exception as e:
+            self.logger.debug(f"コピーボタン近接チェックエラー: {e}")
+            return False
+
+    def check_copy_button_after_current_prompt(self):
+        """現在送信したプロンプトの後にコピーボタンがあるかチェック"""
+        try:
+            if not hasattr(self, 'current_prompt_text') or not self.current_prompt_text:
+                return False
+            
+            # ページ内で送信したプロンプトテキストを含む要素を探す
+            prompt_text_short = self.current_prompt_text[:50]  # 最初の50文字で検索
+            
+            # プロンプトテキストを含む要素を探す
+            xpath_query = f"//*[contains(text(), '{prompt_text_short}')]"
+            
+            try:
+                prompt_elements = self.driver.find_elements(By.XPATH, xpath_query)
+                
+                for prompt_element in prompt_elements:
+                    if prompt_element.is_displayed():
+                        self.logger.debug(f"プロンプト要素を発見: {prompt_element.text[:100]}...")
+                        
+                        # このプロンプト要素の後にコピーボタンがあるかチェック
+                        # 次の兄弟要素や親要素の次の兄弟要素を確認
+                        if self.find_copy_button_after_element(prompt_element):
+                            return True
+                        
+            except Exception as e:
+                self.logger.debug(f"プロンプト要素検索エラー: {e}")
+            
+            # より広範囲にプロンプト文字列を検索
+            try:
+                page_source = self.driver.page_source
+                if self.current_prompt_text in page_source:
+                    self.logger.debug("ページソース内でプロンプトテキストを確認")
+                    
+                    # コピーボタンがプロンプト送信後に増えているかチェック
+                    current_copy_count = self.count_existing_copy_buttons()
+                    if current_copy_count > self.existing_copy_button_count:
+                        self.logger.debug(f"コピーボタンが増加: {self.existing_copy_button_count} → {current_copy_count}")
+                        return True
+                        
+            except Exception as e:
+                self.logger.debug(f"ページソース検索エラー: {e}")
+            
+            return False
+            
+        except Exception as e:
+            self.logger.debug(f"プロンプト後コピーボタンチェックエラー: {e}")
+            return False
+
+    def find_copy_button_after_element(self, element):
+        """指定要素の後にコピーボタンがあるかチェック"""
+        try:
+            # 要素の後の兄弟要素をチェック
+            following_elements = element.find_elements(By.XPATH, "./following-sibling::*")
+            
+            for following in following_elements[:10]:  # 最初の10個をチェック
+                copy_buttons = following.find_elements(By.XPATH, ".//*[contains(text(), 'コピー') or contains(text(), 'Copy')]")
+                if copy_buttons:
+                    visible_copies = [btn for btn in copy_buttons if btn.is_displayed()]
+                    if visible_copies:
+                        self.logger.debug("プロンプト要素後にコピーボタンを発見")
+                        return True
+            
+            # 親要素の次の兄弟要素もチェック
+            try:
+                parent = element.find_element(By.XPATH, "..")
+                parent_following = parent.find_elements(By.XPATH, "./following-sibling::*")
+                
+                for following in parent_following[:5]:  # 最初の5個をチェック
+                    copy_buttons = following.find_elements(By.XPATH, ".//*[contains(text(), 'コピー') or contains(text(), 'Copy')]")
+                    if copy_buttons:
+                        visible_copies = [btn for btn in copy_buttons if btn.is_displayed()]
+                        if visible_copies:
+                            self.logger.debug("プロンプト親要素後にコピーボタンを発見")
+                            return True
+            except:
+                pass
+                
+            return False
+            
+        except Exception as e:
+            self.logger.debug(f"要素後コピーボタン検索エラー: {e}")
+            return False
 
     def get_response_text(self):
         """応答テキストを取得（ストリーミング対応）"""
@@ -899,10 +1042,12 @@ class ChromeAutomationTool:
         max_retries = 10
         retry_count = 0
         
-        # プロンプト送信前の既存応答数を記録
+        # プロンプト送信前の既存応答数とコピーボタン数を記録
         self.existing_response_count = self.count_existing_responses()
+        self.existing_copy_button_count = self.count_existing_copy_buttons()
+        self.current_prompt_text = prompt_text  # 送信するプロンプトテキストを保存
         self.prompt_send_time = time.time()  # プロンプト送信時刻を記録
-        self.logger.info(f"プロンプト送信前の既存応答数: {self.existing_response_count}")
+        self.logger.info(f"プロンプト送信前 - 既存応答数: {self.existing_response_count}, 既存コピーボタン数: {self.existing_copy_button_count}")
         
         # テキスト入力フィールドを探す
         text_input = self.find_text_input()
