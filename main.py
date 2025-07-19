@@ -65,6 +65,17 @@ class ChromeAutomationTool:
             chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
             chrome_options.add_experimental_option('useAutomationExtension', False)
             
+            # ユーザープロファイルディレクトリを設定してログイン状態を保持
+            profile_dir = Path.home() / ".chrome_automation_profile"
+            profile_dir.mkdir(exist_ok=True)
+            chrome_options.add_argument(f"--user-data-dir={profile_dir}")
+            
+            # プロファイル名を指定
+            chrome_options.add_argument("--profile-directory=AutomationProfile")
+            
+            self.logger.info(f"Chromeプロファイルディレクトリ: {profile_dir}")
+            self.logger.info("ログイン状態は次回起動時も保持されます")
+            
             # webdriver-managerのバージョンを確認
             try:
                 import webdriver_manager
@@ -422,8 +433,17 @@ class ChromeAutomationTool:
     def close(self):
         """ブラウザを閉じる"""
         if self.driver:
-            self.driver.quit()
-            self.logger.info("ブラウザを閉じました")
+            # ユーザーに確認してからブラウザを閉じる
+            try:
+                print("\nブラウザを閉じますか？")
+                print("ログイン状態は保持されます。")
+                print("Enterキーでブラウザを閉じる、Ctrl+Cで中断: ")
+                input()
+                self.driver.quit()
+                self.logger.info("ブラウザを閉じました（ログイン状態は保持されています）")
+            except KeyboardInterrupt:
+                print("\nブラウザは開いたままにします")
+                self.logger.info("ブラウザは開いたままです")
 
 
 def main():
