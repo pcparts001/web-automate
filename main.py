@@ -1047,9 +1047,14 @@ class ChromeAutomationTool:
                         self.logger.info(f"要素{i+1}: ID={content_id}, テキスト長={len(text_content)}文字, クラス={element_classes}")
                         self.logger.info(f"  プレビュー: {text_content[:100]}...")
                         
-                        # エラーメッセージは候補から除外
+                        # エラーメッセージやThinking状態は候補から除外（フォールバック処理時）
                         if "応答の生成中にエラーが発生" in text_content or "再生成" in text_content:
                             self.logger.info(f"  ✗ エラーメッセージのため除外: {text_content[:50]}...")
+                            continue
+                        
+                        # フォールバック処理時（wait_for_streaming=False）はThinking状態を除外
+                        if not wait_for_streaming and ("Thinking" in text_content or "thinking" in element_classes):
+                            self.logger.info(f"  ✗ フォールバック処理時のThinking状態のため除外: {text_content[:50]}...")
                             continue
                         
                         # thinking状態やストリーミング中でも候補に含める（テキストが短くても）

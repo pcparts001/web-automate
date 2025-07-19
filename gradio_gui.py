@@ -142,8 +142,60 @@ class AutomationGUI:
                                 fallback_response_text = fallback_response_text[1]
                                 
                             if fallback_response_text and "応答の生成中にエラーが発生" not in fallback_response_text:
-                                self.status_queue.put("✅ フォールバック応答受信完了")
-                                self.response_queue.put(fallback_response_text)
+                                # フォールバック後に再生成ボタンが表示されていないかチェック
+                                time.sleep(2)  # 少し待機してから再生成ボタンをチェック
+                                regenerate_button = self.tool.find_regenerate_button()
+                                
+                                if regenerate_button:
+                                    self.status_queue.put("⚠️ フォールバック後も再生成ボタンが表示 - 再度フォールバック実行")
+                                    
+                                    # 再度フォールバック処理を実行（最大2回まで）
+                                    for retry_attempt in range(2):
+                                        self.status_queue.put(f"🔄 フォールバック再実行中 ({retry_attempt + 1}/2)...")
+                                        
+                                        # 再度フォールバックメッセージを送信
+                                        text_input = self.tool.find_text_input()
+                                        if text_input:
+                                            text_input.clear()
+                                            
+                                            if '\n' in fallback_message.strip():
+                                                escaped_text = fallback_message.strip().replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+                                                self.tool.driver.execute_script(f'arguments[0].value = "{escaped_text}";', text_input)
+                                                self.tool.driver.execute_script('arguments[0].dispatchEvent(new Event("input", { bubbles: true }));', text_input)
+                                            else:
+                                                text_input.send_keys(fallback_message.strip())
+                                                
+                                            # 送信
+                                            submit_button = self.tool.find_submit_button()
+                                            if submit_button == "ENTER_KEY":
+                                                from selenium.webdriver.common.keys import Keys
+                                                text_input.send_keys(Keys.RETURN)
+                                            elif submit_button:
+                                                submit_button.click()
+                                            
+                                            time.sleep(3)
+                                            
+                                            # 再生成ボタンが消えたかチェック
+                                            regenerate_button_check = self.tool.find_regenerate_button()
+                                            if not regenerate_button_check:
+                                                # 成功
+                                                final_fallback_response = self.tool.get_latest_message_content(wait_for_streaming=False)
+                                                if isinstance(final_fallback_response, tuple):
+                                                    final_fallback_response = final_fallback_response[1]
+                                                
+                                                if final_fallback_response:
+                                                    self.status_queue.put(f"✅ フォールバック再実行成功 ({retry_attempt + 1}回目)")
+                                                    self.response_queue.put(final_fallback_response)
+                                                    break
+                                            else:
+                                                self.status_queue.put(f"⚠️ フォールバック再実行 {retry_attempt + 1} 回目も失敗")
+                                        
+                                        if retry_attempt == 1:  # 最後の試行
+                                            self.status_queue.put("❌ フォールバック再実行も失敗 - デフォルトメッセージを表示")
+                                            self.response_queue.put(fallback_message.strip())
+                                else:
+                                    self.status_queue.put("✅ フォールバック応答受信完了")
+                                    self.response_queue.put(fallback_response_text)
                             else:
                                 self.status_queue.put("⚠️ フォールバック送信も失敗 - メッセージを表示")
                                 self.response_queue.put(fallback_message.strip())
