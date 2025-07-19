@@ -280,6 +280,34 @@ class ChromeAutomationTool:
         self.logger.warning("送信ボタンが見つかりません")
         return None
     
+    def debug_page_structure(self):
+        """ページ構造をデバッグ出力（トラブルシューティング用）"""
+        try:
+            self.logger.info("=== ページ構造デバッグ ===")
+            
+            # ページタイトルとURL
+            self.logger.info(f"URL: {self.driver.current_url}")
+            self.logger.info(f"タイトル: {self.driver.title}")
+            
+            # 最近追加された要素（テキストを持つ）
+            elements_with_text = self.driver.find_elements(By.XPATH, "//*[string-length(text()) > 20]")
+            self.logger.info(f"テキストを持つ要素数: {len(elements_with_text)}")
+            
+            # 最新の10個の要素を表示
+            for i, element in enumerate(elements_with_text[-10:]):
+                try:
+                    tag = element.tag_name
+                    class_attr = element.get_attribute("class") or ""
+                    id_attr = element.get_attribute("id") or ""
+                    text_preview = element.text.strip()[:100] + "..." if len(element.text.strip()) > 100 else element.text.strip()
+                    
+                    self.logger.info(f"要素 {i+1}: <{tag}> class='{class_attr}' id='{id_attr}' テキスト='{text_preview}'")
+                except:
+                    continue
+                    
+        except Exception as e:
+            self.logger.error(f"ページ構造デバッグエラー: {e}")
+
     def check_for_error_message(self):
         """エラーメッセージをチェック"""
         error_selectors = [
@@ -391,6 +419,15 @@ class ChromeAutomationTool:
                 
                 if isinstance(response_element_selector, str):
                     methods.append(('selector', response_element_selector))
+                    # 同様のセレクターのバリエーションも試す
+                    if '*' not in response_element_selector:  # 既にワイルドカードを含まない場合
+                        # クラス名やIDの部分マッチも試す
+                        if response_element_selector.startswith('.'):
+                            class_name = response_element_selector[1:]
+                            methods.append(('partial_class', f"[class*='{class_name}']"))
+                        elif response_element_selector.startswith('#'):
+                            id_name = response_element_selector[1:]
+                            methods.append(('partial_id', f"[id*='{id_name}']"))
                 else:
                     if element_info['id']:
                         methods.append(('id', element_info['id']))
@@ -401,10 +438,13 @@ class ChromeAutomationTool:
                 
                 for method_type, method_value in methods:
                     try:
-                        if method_type == 'selector':
+                        if method_type == 'selector' or method_type == 'partial_class' or method_type == 'partial_id':
                             elements = self.driver.find_elements(By.CSS_SELECTOR, method_value)
                             if elements:
-                                current_element = elements[-1]  # 最新の要素
+                                # 有効な要素の中で最もテキストが長いものを選択
+                                valid_elements = [e for e in elements if e.is_displayed() and len(e.text.strip()) > 0]
+                                if valid_elements:
+                                    current_element = max(valid_elements, key=lambda e: len(e.text.strip()))
                         elif method_type == 'id':
                             current_element = self.driver.find_element(By.ID, method_value)
                         elif method_type == 'xpath':
@@ -413,7 +453,9 @@ class ChromeAutomationTool:
                             elements = self.driver.find_elements(By.CLASS_NAME, method_value)
                             if elements:
                                 # クラス名で複数見つかった場合は、テキストが最も長い要素を選択
-                                current_element = max(elements, key=lambda e: len(e.text.strip()) if e.text else 0)
+                                valid_elements = [e for e in elements if e.is_displayed() and len(e.text.strip()) > 0]
+                                if valid_elements:
+                                    current_element = max(valid_elements, key=lambda e: len(e.text.strip()))
                         
                         if current_element and current_element.is_displayed():
                             break
@@ -423,9 +465,31 @@ class ChromeAutomationTool:
                         continue
                 
                 if not current_element:
-                    self.logger.warning(f"チェック {i+1}: 要素が見つかりません")
-                    time.sleep(check_interval)
-                    continue
+                    # セレクターで見つからない場合は、新しく出現したテキストコンテンツを探す
+                    self.logger.debug(f"チェック {i+1}: セレクター検索失敗、代替検索を実行中...")
+                    try:
+                        # ページ上の全div要素から長いテキストを持つものを探す
+                        all_divs = self.driver.find_elements(By.TAG_NAME, "div")
+                        text_candidates = []
+                        
+                        for div in all_divs[-100:]:  # 最新の100要素をチェック
+                            if div.is_displayed():
+                                text = div.text.strip()
+                                if len(text) > 50:  # 50文字以上のテキスト
+                                    text_candidates.append((div, len(text)))
+                        
+                        if text_candidates:
+                            # 最も長いテキストを持つ要素を選択
+                            current_element = max(text_candidates, key=lambda x: x[1])[0]
+                            self.logger.debug(f"代替検索で要素を発見: {len(current_element.text.strip())}文字")
+                        else:
+                            self.logger.warning(f"チェック {i+1}: 要素が見つかりません")
+                            time.sleep(check_interval)
+                            continue
+                    except Exception as fallback_error:
+                        self.logger.debug(f"代替検索エラー: {fallback_error}")
+                        time.sleep(check_interval)
+                        continue
                 
                 current_text = current_element.text.strip()
                 current_length = len(current_text)
@@ -480,30 +544,58 @@ class ChromeAutomationTool:
 
     def get_response_text(self):
         """応答テキストを取得（ストリーミング対応）"""
-        # 一般的な応答コンテナのセレクター
+        # Genspark.ai用の具体的なセレクターを最初に試す
         response_selectors = [
+            # Genspark.ai 固有のセレクター
+            ".thinking_prompt",
+            ".response_text", 
+            ".assistant-message",
+            ".ai-response",
+            ".chat-response",
+            ".output-container",
+            # 一般的な応答コンテナのセレクター
             ".response-content",
             ".message-content", 
             ".output-text",
             ".result",
-            "[data-testid='conversation-turn-content']"
+            "[data-testid='conversation-turn-content']",
+            # より広範囲なセレクター
+            "[class*='response']",
+            "[class*='message']",
+            "[class*='output']",
+            "[class*='answer']",
+            "[id*='response']",
+            "[id*='output']"
         ]
+        
+        # 最初に、新しいコンテンツの出現を待機
+        self.logger.info("新しい応答コンテンツの出現を待機中...")
+        time.sleep(3)  # 応答が生成され始めるまで少し待機
         
         # まず一般的なセレクターを試す
         for selector in response_selectors:
             try:
                 elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
                 if elements:
-                    # 最後の要素（最新の応答）を取得
-                    response_element = elements[-1]
-                    if response_element.is_displayed():
-                        self.logger.info(f"応答要素を発見（セレクター: {selector}）")
+                    # 新しく追加された要素を特定（最後の要素、または最も長いテキストを持つ要素）
+                    candidate_elements = []
+                    for element in elements:
+                        if element.is_displayed():
+                            text_length = len(element.text.strip())
+                            if text_length > 0:  # 空でない要素
+                                candidate_elements.append((element, text_length))
+                    
+                    if candidate_elements:
+                        # テキストが最も長い要素を選択（最新の応答の可能性が高い）
+                        response_element = max(candidate_elements, key=lambda x: x[1])[0]
+                        self.logger.info(f"応答要素を発見（セレクター: {selector}, テキスト長: {len(response_element.text.strip())}文字）")
+                        
                         # ストリーミング応答の完了を待機（要素ではなくセレクターを渡す）
                         final_text = self.wait_for_streaming_response_complete(selector)
                         if final_text and "応答の生成中にエラーが発生しました" not in final_text:
                             return final_text
             except Exception as e:
-                self.logger.debug(f"応答テキスト取得エラー: {e}")
+                self.logger.debug(f"応答テキスト取得エラー ({selector}): {e}")
                 continue
         
         # 一般的なセレクターで見つからない場合、より広範囲に検索
@@ -670,6 +762,8 @@ class ChromeAutomationTool:
                     return True
                 else:
                     self.logger.warning("応答テキストが取得できませんでした")
+                    # デバッグ情報を出力してページ構造を確認
+                    self.debug_page_structure()
                     time.sleep(2)
                     
         self.logger.error(f"最大試行回数({max_retries})に達しました")
