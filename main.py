@@ -325,14 +325,16 @@ class ChromeAutomationTool:
     
     def get_response_text(self):
         """応答テキストを取得"""
+        # 一般的な応答コンテナのセレクター
         response_selectors = [
             ".response-content",
-            ".message-content",
+            ".message-content", 
             ".output-text",
             ".result",
             "[data-testid='conversation-turn-content']"
         ]
         
+        # まず一般的なセレクターを試す
         for selector in response_selectors:
             try:
                 elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
@@ -345,6 +347,80 @@ class ChromeAutomationTool:
             except Exception as e:
                 self.logger.debug(f"応答テキスト取得エラー: {e}")
                 continue
+        
+        # 一般的なセレクターで見つからない場合、より広範囲に検索
+        self.logger.info("広範囲で応答テキストを検索中...")
+        
+        try:
+            # 入力フィールドの後に追加された新しい要素を探す
+            current_url = self.driver.current_url
+            self.logger.debug(f"現在のURL: {current_url}")
+            
+            # ページ全体のテキストを確認
+            body_elements = self.driver.find_elements(By.TAG_NAME, "div")
+            
+            # 最近追加された要素で、ある程度の長さのテキストを持つものを探す
+            for element in reversed(body_elements[-50:]):  # 最後の50個の要素をチェック
+                try:
+                    element_text = element.text.strip()
+                    element_tag = element.tag_name
+                    element_class = element.get_attribute("class") or ""
+                    
+                    # 長いテキスト、かつ入力した内容以外のものを探す
+                    if (element_text and 
+                        len(element_text) > 10 and 
+                        "こんにちわ" not in element_text and  # 入力したテキストを除外
+                        not any(skip_word in element_text.lower() for skip_word in ["button", "input", "menu", "nav", "header", "footer"]) and
+                        element.is_displayed()):
+                        
+                        # 応答らしい要素を特定するキーワード
+                        response_indicators = ["回答", "応答", "返答", "こんにちは", "hello", "hi", "答え"]
+                        
+                        self.logger.debug(f"要素候補: タグ={element_tag}, クラス='{element_class}', テキスト='{element_text[:100]}...'")
+                        
+                        # 応答らしいテキストかチェック
+                        if (any(indicator in element_text.lower() for indicator in response_indicators) or
+                            len(element_text) > 50):  # 50文字以上の長いテキスト
+                            
+                            self.logger.info(f"応答候補を発見: {len(element_text)}文字")
+                            self.logger.debug(f"応答テキスト: {element_text[:200]}...")
+                            return element_text
+                            
+                except Exception as e:
+                    self.logger.debug(f"要素チェック中のエラー: {e}")
+                    continue
+            
+            # 特定のサイト向けの検索パターン
+            site_specific_selectors = [
+                # Genspark.ai用
+                "[class*='response']",
+                "[class*='answer']", 
+                "[class*='reply']",
+                "[class*='message']",
+                "[class*='content']",
+                # その他のAIサイト用
+                "[role='main'] div",
+                "[role='dialog'] div",
+                "main div",
+                "article div"
+            ]
+            
+            for selector in site_specific_selectors:
+                try:
+                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    for element in elements:
+                        text = element.text.strip()
+                        if (text and len(text) > 20 and 
+                            "こんにちわ" not in text and
+                            element.is_displayed()):
+                            self.logger.info(f"サイト固有検索で発見: {len(text)}文字")
+                            return text
+                except Exception as e:
+                    self.logger.debug(f"サイト固有検索エラー ({selector}): {e}")
+                    continue
+                    
+        except Exception as e:
+            self.logger.error(f"広範囲検索中のエラー: {e}")
                 
         self.logger.warning("応答テキストが見つかりません")
         return None
