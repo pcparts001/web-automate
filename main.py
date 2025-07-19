@@ -46,27 +46,56 @@ class ChromeAutomationTool:
     def launch_chrome(self):
         """Chromeブラウザを起動"""
         try:
+            # プラットフォーム情報を詳細にログ出力
+            system = platform.system()
+            machine = platform.machine()
+            release = platform.release()
+            version = platform.version()
+            
+            self.logger.info(f"=== プラットフォーム情報 ===")
+            self.logger.info(f"システム: {system}")
+            self.logger.info(f"アーキテクチャ: {machine}")
+            self.logger.info(f"リリース: {release}")
+            self.logger.info(f"バージョン: {version}")
+            self.logger.info(f"Pythonバージョン: {platform.python_version()}")
+            
             chrome_options = Options()
             chrome_options.add_argument("--disable-blink-features=AutomationControlled")
             chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
             chrome_options.add_experimental_option('useAutomationExtension', False)
             
-            # プラットフォームに応じたChromeDriverManagerの設定
-            system = platform.system()
-            machine = platform.machine()
+            # webdriver-managerのバージョンを確認
+            try:
+                import webdriver_manager
+                self.logger.info(f"webdriver-manager バージョン: {webdriver_manager.__version__}")
+            except:
+                self.logger.warning("webdriver-managerバージョンが取得できませんでした")
             
-            if system == "Darwin" and machine == "arm64":
-                # Mac M1/M2の場合
-                chrome_driver_path = ChromeDriverManager(os_type="mac-arm64").install()
-            elif system == "Darwin":
-                # Intel Macの場合
-                chrome_driver_path = ChromeDriverManager(os_type="mac64").install()
-            elif system == "Linux":
-                # Linuxの場合
-                chrome_driver_path = ChromeDriverManager(os_type="linux64").install()
-            else:
-                # その他のプラットフォーム（自動検出）
+            # ChromeDriverManagerの設定（バージョンに応じて分岐）
+            self.logger.info("ChromeDriverをダウンロード中...")
+            
+            try:
+                # 新しいバージョンのwebdriver-managerを試す
+                if system == "Darwin" and machine == "arm64":
+                    self.logger.info("Mac M1/M2用のChromeDriverを取得します")
+                    chrome_driver_path = ChromeDriverManager(os_type="mac-arm64").install()
+                elif system == "Darwin":
+                    self.logger.info("Intel Mac用のChromeDriverを取得します")
+                    chrome_driver_path = ChromeDriverManager(os_type="mac64").install()
+                elif system == "Linux":
+                    self.logger.info("Linux用のChromeDriverを取得します")
+                    chrome_driver_path = ChromeDriverManager(os_type="linux64").install()
+                else:
+                    self.logger.info("自動検出でChromeDriverを取得します")
+                    chrome_driver_path = ChromeDriverManager().install()
+                    
+            except TypeError as e:
+                # 古いバージョンのwebdriver-managerの場合
+                self.logger.warning(f"os_typeパラメータが使用できません: {e}")
+                self.logger.info("互換性モードでChromeDriverを取得します")
                 chrome_driver_path = ChromeDriverManager().install()
+            
+            self.logger.info(f"ChromeDriverのパス: {chrome_driver_path}")
                 
             service = Service(chrome_driver_path)
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
@@ -79,6 +108,9 @@ class ChromeAutomationTool:
             
         except Exception as e:
             self.logger.error(f"Chromeブラウザの起動に失敗: {e}")
+            self.logger.error(f"エラータイプ: {type(e).__name__}")
+            import traceback
+            self.logger.error(f"詳細なエラー情報:\n{traceback.format_exc()}")
             return False
     
     def wait_for_user_navigation(self):
