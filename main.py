@@ -1063,9 +1063,10 @@ class ChromeAutomationTool:
                         text_content = element.text.strip()
                         element_classes = element.get_attribute("class") or ""
                         
-                        # 詳細デバッグ情報
+                        # 詳細デバッグ情報（プライバシー保護）
                         self.logger.info(f"要素{i+1}: ID={content_id}, テキスト長={len(text_content)}文字, クラス={element_classes}")
-                        self.logger.info(f"  プレビュー: {text_content[:100]}...")
+                        masked_preview = self.mask_text_for_debug(text_content)
+                        self.logger.info(f"  プレビュー: {masked_preview}")
                         
                         # エラーメッセージやThinking状態は候補から除外（フォールバック処理時）
                         if "応答の生成中にエラーが発生" in text_content or "再生成" in text_content:
@@ -1100,7 +1101,8 @@ class ChromeAutomationTool:
             
             self.logger.info(f"=== 有効な要素一覧（ID順） ===")
             for content_id, element, text_content in elements_with_id:
-                self.logger.info(f"ID={content_id}: {text_content[:50]}...")
+                masked_content = self.mask_text_for_debug(text_content, max_preview=10)
+                self.logger.info(f"ID={content_id}: {masked_content}")
             
             self.logger.info(f"=== プロンプト送信前の既存応答数: {self.existing_response_count} ===")
             
@@ -1146,7 +1148,8 @@ class ChromeAutomationTool:
                         
                         if any(pattern in text_content.lower() for pattern in prompt_patterns):
                             is_user_prompt_like = True
-                            self.logger.info(f"  ✗ ID={content_id}はプロンプトパターンを含む短いテキストのため除外")
+                            masked_pattern = self.mask_text_for_debug(text_content)
+                            self.logger.info(f"  ✗ ID={content_id}はプロンプトパターンを含む短いテキストのため除外: {masked_pattern}")
                     
                     if not is_user_prompt_like:
                         self.logger.info(f"  ✓ ID={content_id}はプロンプトテキストを含みません")
@@ -1275,8 +1278,17 @@ class ChromeAutomationTool:
         if latest_response_text:
             return latest_response_text
         
-        # get_latest_message_content() が None を返した場合は、エラー状態と判断して終了
-        self.logger.warning("get_latest_message_content()がNoneを返しました - エラー状態のため応答取得を中断")
+        # get_latest_message_content() が None を返した場合は再生成ボタンをチェック
+        self.logger.warning("get_latest_message_content()がNoneを返しました - 再生成ボタンをチェック")
+        
+        # 再生成ボタンがあるかチェック
+        regenerate_button = self.find_regenerate_button()
+        if regenerate_button:
+            self.logger.warning("再生成ボタンを検出 - エラー状態です")
+            return "REGENERATE_ERROR_DETECTED"
+        
+        # 再生成ボタンもない場合は絶対的なエラー
+        self.logger.error("応答も再生成ボタンも見つからない - 絶対的エラー")
         return None
     
     def save_to_markdown(self, text, prompt):
@@ -1398,12 +1410,18 @@ class ChromeAutomationTool:
         
         # 正常な応答テキストを取得
         response_text = self.get_response_text()
-        if response_text and response_text != "REGENERATE_ERROR_DETECTED" and "応答の生成中にエラーが発生" not in response_text:
+        
+        # 再生成エラーの場合は明示的に失敗を返す
+        if response_text == "REGENERATE_ERROR_DETECTED":
+            self.logger.warning("再生成ボタンが検出されました - フォールバック処理が必要")
+            return False, "REGENERATE_ERROR_DETECTED"
+        
+        if response_text and "応答の生成中にエラーが発生" not in response_text:
             filepath = self.save_to_markdown(response_text, prompt_text)
             self.logger.info("処理が正常に完了しました")
             return True, response_text  # GUIのために応答テキストも返す
         else:
-            self.logger.warning("応答テキストが取得できませんでした")
+            self.logger.warning(f"応答テキストが取得できませんでした: {response_text}")
             # デバッグ情報を出力してページ構造を確認
             self.debug_page_structure()
             return False, response_text  # エラーメッセージも返す（フォールバック判定用）

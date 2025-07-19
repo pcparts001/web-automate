@@ -94,14 +94,23 @@ class AutomationGUI:
             # single promptとして処理
             success, response_text = self.tool.process_single_prompt(prompt_text)
             
-            if success and response_text and "応答の生成中にエラーが発生" not in response_text:
+            # 成功かつ有効な応答がある場合
+            if (success and response_text and 
+                response_text != "REGENERATE_ERROR_DETECTED" and 
+                "応答の生成中にエラーが発生" not in response_text):
                 self.status_queue.put("✅ 応答受信完了")
                 self.response_queue.put(response_text)
             else:
                 # 失敗した場合またはエラーメッセージが含まれる場合の処理
-                self.status_queue.put(f"⚠️ エラー検出: {response_text if response_text else 'None'}")
+                if response_text == "REGENERATE_ERROR_DETECTED":
+                    self.status_queue.put("⚠️ 再生成ボタンを検出 - フォールバック処理を開始")
+                else:
+                    self.status_queue.put(f"⚠️ エラー検出: {response_text if response_text else 'None'}")
                 
-                if use_fallback and fallback_message.strip():
+                # フォールバック処理の条件を強化（再生成エラーを明示的に含める）
+                if (use_fallback and fallback_message.strip() and 
+                    (not success or response_text == "REGENERATE_ERROR_DETECTED" or 
+                     (response_text and "応答の生成中にエラーが発生" in response_text))):
                     # フォールバックメッセージを自動送信
                     self.status_queue.put("🔄 フォールバックメッセージを自動送信中...")
                     
