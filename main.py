@@ -1388,7 +1388,7 @@ class ChromeAutomationTool:
             self.logger.info("処理が正常に完了しました")
             return True, response_text
         else:
-            self.logger.warning(f"process_single_prompt: ファイル保存条件を満たしませんでした。response_text={self.mask_text_for_debug(response_text) if response_text else 'None'}, エラーメッセージ有無={("応答の生成中にエラーが発生" in response_text) if response_text else False}")
+            self.logger.warning(f"process_single_prompt: ファイル保存条件を満たしませんでした。response_text={self.mask_text_for_debug(response_text) if response_text else 'None'}, エラーメッセージ有無={'応答の生成中にエラーが発生' in response_text if response_text else False}")
             # デバッグ情報を出力してページ構造を確認
             self.debug_page_structure()
             return False, response_text
