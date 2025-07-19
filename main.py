@@ -328,8 +328,70 @@ class ChromeAutomationTool:
         self.logger.warning("再生成ボタンが見つかりません")
         return None
     
+    def wait_for_streaming_response_complete(self, response_element, timeout=60):
+        """ストリーミング応答が完了するまで待機"""
+        self.logger.info("ストリーミング応答の完了を待機中...")
+        
+        previous_text = ""
+        stable_count = 0
+        required_stable_count = 3  # 3回連続でテキストが変わらなければ完了と判定
+        check_interval = 2  # 2秒間隔でチェック
+        max_checks = timeout // check_interval
+        
+        for i in range(max_checks):
+            try:
+                current_text = response_element.text.strip()
+                current_length = len(current_text)
+                
+                self.logger.debug(f"チェック {i+1}/{max_checks}: テキスト長={current_length}文字")
+                
+                # 前回と同じテキストかチェック
+                if current_text == previous_text:
+                    stable_count += 1
+                    self.logger.debug(f"安定カウント: {stable_count}/{required_stable_count}")
+                    
+                    if stable_count >= required_stable_count:
+                        self.logger.info(f"ストリーミング応答が完了しました（最終: {current_length}文字）")
+                        return current_text
+                else:
+                    # テキストが変化した場合はカウントをリセット
+                    stable_count = 0
+                    previous_text = current_text
+                    self.logger.debug(f"テキスト更新: {current_length}文字")
+                
+                # 応答が生成中かどうかを示すインジケーターをチェック
+                loading_indicators = [
+                    "生成中", "生成しています", "thinking", "generating", "loading", "...", "▌", "●"
+                ]
+                
+                is_still_generating = any(indicator in current_text.lower() for indicator in loading_indicators)
+                
+                # DOM内の生成中インジケーターもチェック
+                try:
+                    page_html = self.driver.page_source.lower()
+                    dom_indicators = ["generating", "loading", "typing", "streaming", "thinking"]
+                    is_dom_generating = any(indicator in page_html for indicator in dom_indicators)
+                    
+                    if is_still_generating or is_dom_generating:
+                        self.logger.debug("生成中インジケーターを検出")
+                        stable_count = 0  # インジケーターがある間はカウントリセット
+                        
+                except Exception as e:
+                    self.logger.debug(f"DOM生成中チェックエラー: {e}")
+                
+                time.sleep(check_interval)
+                
+            except Exception as e:
+                self.logger.error(f"ストリーミング応答チェック中のエラー: {e}")
+                time.sleep(check_interval)
+                continue
+        
+        # タイムアウトした場合でも、最後に取得できたテキストを返す
+        self.logger.warning(f"ストリーミング応答のタイムアウト（{timeout}秒）")
+        return previous_text if previous_text else None
+
     def get_response_text(self):
-        """応答テキストを取得"""
+        """応答テキストを取得（ストリーミング対応）"""
         # 一般的な応答コンテナのセレクター
         response_selectors = [
             ".response-content",
@@ -345,10 +407,13 @@ class ChromeAutomationTool:
                 elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
                 if elements:
                     # 最後の要素（最新の応答）を取得
-                    response_text = elements[-1].text
-                    if response_text and "応答の生成中にエラーが発生しました" not in response_text:
-                        self.logger.info(f"応答テキストを取得: {len(response_text)}文字")
-                        return response_text
+                    response_element = elements[-1]
+                    if response_element.is_displayed():
+                        self.logger.info(f"応答要素を発見（セレクター: {selector}）")
+                        # ストリーミング応答の完了を待機
+                        final_text = self.wait_for_streaming_response_complete(response_element)
+                        if final_text and "応答の生成中にエラーが発生しました" not in final_text:
+                            return final_text
             except Exception as e:
                 self.logger.debug(f"応答テキスト取得エラー: {e}")
                 continue
@@ -370,11 +435,14 @@ class ChromeAutomationTool:
                     element_text = element.text.strip()
                     element_tag = element.tag_name
                     element_class = element.get_attribute("class") or ""
+                    element_id = element.get_attribute("id") or ""
+                    
+                    # DOM情報のデバッグログ
+                    self.logger.debug(f"要素情報: タグ={element_tag}, ID='{element_id}', クラス='{element_class}', 表示={element.is_displayed()}")
                     
                     # 長いテキスト、かつ入力した内容以外のものを探す
                     if (element_text and 
                         len(element_text) > 10 and 
-                        "こんにちわ" not in element_text and  # 入力したテキストを除外
                         not any(skip_word in element_text.lower() for skip_word in ["button", "input", "menu", "nav", "header", "footer"]) and
                         element.is_displayed()):
                         
@@ -385,11 +453,14 @@ class ChromeAutomationTool:
                         
                         # 応答らしいテキストかチェック
                         if (any(indicator in element_text.lower() for indicator in response_indicators) or
-                            len(element_text) > 50):  # 50文字以上の長いテキスト
+                            len(element_text) > 30):  # 30文字以上の長いテキスト
                             
                             self.logger.info(f"応答候補を発見: {len(element_text)}文字")
-                            self.logger.debug(f"応答テキスト: {element_text[:200]}...")
-                            return element_text
+                            
+                            # ストリーミング応答の完了を待機
+                            final_text = self.wait_for_streaming_response_complete(element)
+                            if final_text:
+                                return final_text
                             
                 except Exception as e:
                     self.logger.debug(f"要素チェック中のエラー: {e}")
@@ -415,11 +486,16 @@ class ChromeAutomationTool:
                     elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
                     for element in elements:
                         text = element.text.strip()
-                        if (text and len(text) > 20 and 
-                            "こんにちわ" not in text and
-                            element.is_displayed()):
-                            self.logger.info(f"サイト固有検索で発見: {len(text)}文字")
-                            return text
+                        if (text and len(text) > 20 and element.is_displayed()):
+                            
+                            self.logger.debug(f"サイト固有要素: セレクター={selector}, クラス='{element.get_attribute('class')}', ID='{element.get_attribute('id')}'")
+                            
+                            # ストリーミング応答の完了を待機
+                            final_text = self.wait_for_streaming_response_complete(element)
+                            if final_text:
+                                self.logger.info(f"サイト固有検索で発見: {len(final_text)}文字")
+                                return final_text
+                                
                 except Exception as e:
                     self.logger.debug(f"サイト固有検索エラー ({selector}): {e}")
                     continue
