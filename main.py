@@ -374,6 +374,29 @@ class ChromeAutomationTool:
         
         self.logger.info("再生成ボタン検出をデバッグモードで実行（Thinkingチェック無効）")
         
+        # 全体的なページ内容を検索（デバッグ用）
+        try:
+            page_source = self.driver.page_source
+            regenerate_in_source = "再生成" in page_source
+            retry_in_source = "retry" in page_source.lower()
+            self.logger.info(f"ページソース内の再生成関連チェック: '再生成'={regenerate_in_source}, 'retry'={retry_in_source}")
+            
+            # すべてのテキスト要素を検索
+            all_text_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), '再生成')]")
+            self.logger.info(f"'再生成'を含むすべての要素: {len(all_text_elements)}個")
+            
+            for i, elem in enumerate(all_text_elements[:5]):  # 最初の5個
+                try:
+                    tag = elem.tag_name
+                    classes = elem.get_attribute("class") or ""
+                    text = elem.text.strip()[:50]
+                    displayed = elem.is_displayed()
+                    self.logger.info(f"  再生成要素{i+1}: <{tag}> class='{classes}' displayed={displayed} text='{text}'")
+                except:
+                    pass
+        except Exception as e:
+            self.logger.debug(f"広範囲検索エラー: {e}")
+        
         # まず全体的なデバッグ情報を取得
         try:
             all_retry_elements = self.driver.find_elements(By.CSS_SELECTOR, "*[class*='retry']")
