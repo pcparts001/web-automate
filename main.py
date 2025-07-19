@@ -1158,6 +1158,16 @@ class ChromeAutomationTool:
 
     def get_response_text(self):
         """応答テキストを取得（ストリーミング対応）"""
+        # まずエラーメッセージの存在をチェック
+        try:
+            error_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), '応答の生成中にエラーが発生') or contains(text(), '再生成')]")
+            visible_errors = [elem for elem in error_elements if elem.is_displayed()]
+            if visible_errors:
+                self.logger.warning(f"エラーメッセージが表示されているため応答取得をスキップ: {len(visible_errors)}個")
+                return None
+        except Exception as e:
+            self.logger.debug(f"エラーメッセージチェック中のエラー: {e}")
+        
         # 最新のmessage-content-id要素を直接検索する専用メソッドを最初に試す
         latest_response_text = self.get_latest_message_content()
         if latest_response_text:
@@ -1194,11 +1204,11 @@ class ChromeAutomationTool:
         existing_response_count = self.existing_response_count
         self.logger.debug(f"参照する既存応答数: {existing_response_count}")
         
-        # 新しい応答の生成開始を待機
+        # 新しい応答の生成開始を待機（短縮）
         self.logger.info("新しい応答の生成開始を待機中...")
         new_response_detected = False
         wait_start_time = time.time()
-        max_wait_time = 15  # 新しい応答検出の最大待機時間
+        max_wait_time = 5  # 新しい応答検出の最大待機時間（15秒→5秒に短縮）
         
         # 新しい応答が実際に開始されるまで待機
         while not new_response_detected and (time.time() - wait_start_time) < max_wait_time:
