@@ -505,8 +505,10 @@ class ChromeAutomationTool:
                     visible_copy_buttons = [btn for btn in copy_buttons if btn.is_displayed()]
                     
                     if visible_copy_buttons and current_length > 100:  # コピーボタンがあり、十分なテキストがある
-                        self.logger.info(f"コピーボタンを検出 - 応答完了と判定（{current_length}文字）")
-                        return current_text
+                        # 「コピー」以下のテキストを除去
+                        cleaned_text = self.clean_response_text(current_text)
+                        self.logger.info(f"コピーボタンを検出 - 応答完了と判定（{len(cleaned_text)}文字、クリーンアップ済み）")
+                        return cleaned_text
                         
                 except Exception as e:
                     self.logger.debug(f"コピーボタン検出エラー: {e}")
@@ -553,13 +555,15 @@ class ChromeAutomationTool:
                     # 長いテキストの場合は早期完了（1回の安定で十分）
                     early_completion_threshold = 500  # 500文字以上
                     if current_length >= early_completion_threshold and stable_count >= 1 and not is_still_generating:
-                        self.logger.info(f"長いテキストの早期完了判定（{current_length}文字）")
-                        return current_text
+                        cleaned_text = self.clean_response_text(current_text)
+                        self.logger.info(f"長いテキストの早期完了判定（{len(cleaned_text)}文字、クリーンアップ済み）")
+                        return cleaned_text
                     
                     # 通常の完了判定
                     if stable_count >= required_stable_count and not is_still_generating:
-                        self.logger.info(f"ストリーミング応答が完了しました（最終: {current_length}文字）")
-                        return current_text
+                        cleaned_text = self.clean_response_text(current_text)
+                        self.logger.info(f"ストリーミング応答が完了しました（最終: {len(cleaned_text)}文字、クリーンアップ済み）")
+                        return cleaned_text
                 else:
                     # テキストが変化した場合はカウントをリセット
                     if current_length > 0:  # 空のテキストは無視
@@ -581,7 +585,49 @@ class ChromeAutomationTool:
         
         # タイムアウトした場合でも、最後に取得できたテキストを返す
         self.logger.warning(f"ストリーミング応答のタイムアウト（{timeout}秒）")
-        return previous_text if previous_text else None
+        if previous_text:
+            cleaned_text = self.clean_response_text(previous_text)
+            return cleaned_text
+        return None
+
+    def clean_response_text(self, text):
+        """応答テキストから不要な部分（コピーボタン以下など）を除去"""
+        if not text:
+            return text
+            
+        # 「コピー」や「Copy」以下のテキストを除去
+        copy_indicators = ["コピー", "Copy", "copy"]
+        
+        for indicator in copy_indicators:
+            if indicator in text:
+                # 「コピー」の位置を見つけて、その前までのテキストを取得
+                copy_index = text.find(indicator)
+                if copy_index > 0:
+                    # コピーボタンより前の部分を取得
+                    cleaned_text = text[:copy_index].strip()
+                    self.logger.debug(f"「{indicator}」以下を除去: {len(text)} → {len(cleaned_text)}文字")
+                    return cleaned_text
+        
+        # その他の不要な要素を除去
+        unwanted_patterns = [
+            # ボタンテキスト
+            "再生成", "Regenerate", "いいね", "Like", "シェア", "Share",
+            # ナビゲーション要素
+            "次へ", "戻る", "Previous", "Next",
+            # UI要素
+            "メニュー", "Menu", "設定", "Settings"
+        ]
+        
+        cleaned_text = text
+        for pattern in unwanted_patterns:
+            if pattern in cleaned_text:
+                # パターンが文末近くにある場合は除去
+                pattern_index = cleaned_text.rfind(pattern)
+                if pattern_index > len(cleaned_text) * 0.8:  # 文章の80%以降にある場合
+                    cleaned_text = cleaned_text[:pattern_index].strip()
+                    self.logger.debug(f"不要なパターン「{pattern}」を除去")
+        
+        return cleaned_text.strip()
 
     def get_response_text(self):
         """応答テキストを取得（ストリーミング対応）"""
