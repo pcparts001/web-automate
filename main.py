@@ -853,10 +853,9 @@ class ChromeAutomationTool:
                 for indicator in genspark_loading_indicators:
                     # 現在のテキスト内でのチェック
                     if indicator.lower() in current_text.lower():
-                        if len(current_text.strip()) < 50:  # 短いテキストの場合のみ生成中と判定
-                            is_still_generating = True
-                            self.logger.debug(f"テキスト内生成中インジケーター検出: {indicator}")
-                            break
+                        is_still_generating = True
+                        self.logger.debug(f"テキスト内生成中インジケーター検出: {indicator}")
+                        break
                     
                     # ページ内での「thinking」チェック（より限定的）
                     if indicator == "thinking" and "thinking..." in page_text:
@@ -871,6 +870,18 @@ class ChromeAutomationTool:
                                 break
                         except:
                             pass
+                
+                # ページソース全体でThinking関連の要素を再確認
+                try:
+                    if not is_still_generating: # 既に生成中と判定されていない場合のみ
+                        # Thinkingを示す要素をより広範囲に検索
+                        thinking_elements_broad = self.driver.find_elements(By.XPATH, "//*[contains(@class, 'thinking') or contains(text(), 'Thinking') or contains(text(), '考え中') or contains(text(), '生成中')]")
+                        visible_thinking_broad = [elem for elem in thinking_elements_broad if elem.is_displayed()]
+                        if visible_thinking_broad:
+                            is_still_generating = True
+                            self.logger.debug("広範囲なThinking要素を検出")
+                except Exception as e:
+                    self.logger.debug(f"広範囲Thinking要素検索エラー: {e}")
                 
                 # 前回と同じテキストかチェック
                 if current_text == previous_text and current_length > 0:
