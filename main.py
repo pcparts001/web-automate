@@ -30,6 +30,7 @@ class ChromeAutomationTool:
         self.wait = None
         self.debug = debug
         self.prompt_counter = 0  # プロンプトカウンター
+        self.existing_response_count = 0  # プロンプト送信前の既存応答数
         self.setup_logging()
         
     def setup_logging(self):
@@ -630,6 +631,27 @@ class ChromeAutomationTool:
         
         return cleaned_text.strip()
 
+    def count_existing_responses(self):
+        """既存の応答要素数をカウント"""
+        response_selectors = [
+            ".thinking_prompt",
+            ".response_text", 
+            ".assistant-message",
+            ".ai-response",
+            ".chat-response"
+        ]
+        
+        max_count = 0
+        try:
+            for selector in response_selectors:
+                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                max_count = max(max_count, len(elements))
+            self.logger.debug(f"既存応答数カウント結果: {max_count}")
+        except Exception as e:
+            self.logger.debug(f"既存応答数カウントエラー: {e}")
+        
+        return max_count
+
     def get_response_text(self):
         """応答テキストを取得（ストリーミング対応）"""
         # Genspark.ai用の具体的なセレクターを最初に試す
@@ -656,6 +678,10 @@ class ChromeAutomationTool:
             "[id*='output']"
         ]
         
+        # インスタンス変数から既存応答数を取得
+        existing_response_count = self.existing_response_count
+        self.logger.debug(f"参照する既存応答数: {existing_response_count}")
+        
         # 最初に、新しいコンテンツの出現を待機
         self.logger.info("新しい応答コンテンツの出現を待機中...")
         time.sleep(3)  # 応答が生成され始めるまで少し待機
@@ -665,23 +691,35 @@ class ChromeAutomationTool:
             try:
                 elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
                 if elements:
-                    # 新しく追加された要素を特定（最後の要素、または最も長いテキストを持つ要素）
-                    candidate_elements = []
-                    for element in elements:
-                        if element.is_displayed():
-                            text_length = len(element.text.strip())
-                            if text_length > 0:  # 空でない要素
-                                candidate_elements.append((element, text_length))
-                    
-                    if candidate_elements:
-                        # テキストが最も長い要素を選択（最新の応答の可能性が高い）
-                        response_element = max(candidate_elements, key=lambda x: x[1])[0]
-                        self.logger.info(f"応答要素を発見（セレクター: {selector}, テキスト長: {len(response_element.text.strip())}文字）")
+                    # 新しく追加された要素を特定
+                    if len(elements) > existing_response_count:
+                        # 新しい要素がある場合、最後の要素（最新）を選択
+                        response_element = elements[-1]
+                        if response_element.is_displayed() and len(response_element.text.strip()) > 0:
+                            self.logger.info(f"新しい応答要素を発見（セレクター: {selector}, 要素番号: {len(elements)}, テキスト長: {len(response_element.text.strip())}文字）")
+                            
+                            # ストリーミング応答の完了を待機（要素ではなくセレクターを渡す）
+                            final_text = self.wait_for_streaming_response_complete(selector)
+                            if final_text and "応答の生成中にエラーが発生しました" not in final_text:
+                                return final_text
+                    else:
+                        # 既存要素の場合、最も長いテキストを持つ要素を選択（フォールバック）
+                        candidate_elements = []
+                        for element in elements:
+                            if element.is_displayed():
+                                text_length = len(element.text.strip())
+                                if text_length > 0:  # 空でない要素
+                                    candidate_elements.append((element, text_length))
                         
-                        # ストリーミング応答の完了を待機（要素ではなくセレクターを渡す）
-                        final_text = self.wait_for_streaming_response_complete(selector)
-                        if final_text and "応答の生成中にエラーが発生しました" not in final_text:
-                            return final_text
+                        if candidate_elements:
+                            # テキストが最も長い要素を選択
+                            response_element = max(candidate_elements, key=lambda x: x[1])[0]
+                            self.logger.info(f"フォールバック応答要素を発見（セレクター: {selector}, テキスト長: {len(response_element.text.strip())}文字）")
+                            
+                            # ストリーミング応答の完了を待機（要素ではなくセレクターを渡す）
+                            final_text = self.wait_for_streaming_response_complete(selector)
+                            if final_text and "応答の生成中にエラーが発生しました" not in final_text:
+                                return final_text
             except Exception as e:
                 self.logger.debug(f"応答テキスト取得エラー ({selector}): {e}")
                 continue
@@ -698,7 +736,10 @@ class ChromeAutomationTool:
             body_elements = self.driver.find_elements(By.TAG_NAME, "div")
             
             # 最近追加された要素で、ある程度の長さのテキストを持つものを探す
-            for element in reversed(body_elements[-50:]):  # 最後の50個の要素をチェック
+            # プロンプト送信後に新しく追加された要素を優先
+            new_elements = body_elements[min(len(body_elements), existing_response_count * 10):]  # 既存応答数の10倍以降から検索
+            
+            for element in reversed(new_elements[-100:]):  # 最後の100個の要素をチェック
                 try:
                     element_text = element.text.strip()
                     element_tag = element.tag_name
@@ -800,6 +841,11 @@ class ChromeAutomationTool:
         """単一のプロンプトを処理（メイン処理）"""
         max_retries = 10
         retry_count = 0
+        
+        # プロンプト送信前の既存応答数を記録
+        self.existing_response_count = self.count_existing_responses()
+        self.prompt_send_time = time.time()  # プロンプト送信時刻を記録
+        self.logger.info(f"プロンプト送信前の既存応答数: {self.existing_response_count}")
         
         # テキスト入力フィールドを探す
         text_input = self.find_text_input()
