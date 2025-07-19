@@ -1,0 +1,315 @@
+#!/usr/bin/env python3
+"""
+Chrome自動操作ツール
+MacのChromeブラウザを自動で操作し、特定のサイトのボタンを自動で押し、
+出力されたテキストを保存する
+"""
+
+import time
+import logging
+from datetime import datetime
+from pathlib import Path
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from webdriver_manager.chrome import ChromeDriverManager
+
+
+class ChromeAutomationTool:
+    """Chrome自動操作ツールクラス"""
+    
+    def __init__(self, debug=True):
+        """初期化"""
+        self.driver = None
+        self.wait = None
+        self.debug = debug
+        self.setup_logging()
+        
+    def setup_logging(self):
+        """ログ設定"""
+        log_level = logging.DEBUG if self.debug else logging.INFO
+        logging.basicConfig(
+            level=log_level,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler('automation.log'),
+                logging.StreamHandler()
+            ]
+        )
+        self.logger = logging.getLogger(__name__)
+        
+    def launch_chrome(self):
+        """Chromeブラウザを起動"""
+        try:
+            chrome_options = Options()
+            chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            chrome_options.add_experimental_option('useAutomationExtension', False)
+            
+            service = Service(ChromeDriverManager().install())
+            self.driver = webdriver.Chrome(service=service, options=chrome_options)
+            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            
+            self.wait = WebDriverWait(self.driver, 10)
+            
+            self.logger.info("Chromeブラウザを起動しました")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Chromeブラウザの起動に失敗: {e}")
+            return False
+    
+    def wait_for_user_navigation(self):
+        """ユーザーが手動でサイトを開くまで待機"""
+        print("\\n手動で目的のサイトを開いてください...")
+        print("サイトを開いたらEnterキーを押してください: ")
+        input()
+        
+        current_url = self.driver.current_url
+        self.logger.info(f"現在のURL: {current_url}")
+        
+    def find_text_input(self):
+        """テキスト入力フィールドを探す"""
+        selectors = [
+            "textarea",
+            "input[type='text']",
+            "[contenteditable='true']",
+            "textarea[placeholder*='質問']",
+            "textarea[placeholder*='プロンプト']",
+            ".prompt-textarea",
+            "#prompt-textarea"
+        ]
+        
+        for selector in selectors:
+            try:
+                element = self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+                self.logger.debug(f"テキスト入力フィールドを発見: {selector}")
+                return element
+            except TimeoutException:
+                continue
+                
+        self.logger.warning("テキスト入力フィールドが見つかりません")
+        return None
+    
+    def find_submit_button(self):
+        """送信ボタンを探す"""
+        selectors = [
+            "button[type='submit']",
+            "input[type='submit']",
+            "button:contains('送信')",
+            "button:contains('生成')",
+            "button:contains('実行')",
+            ".submit-button",
+            ".send-button"
+        ]
+        
+        for selector in selectors:
+            try:
+                if ":contains" in selector:
+                    # XPathを使用してテキストで検索
+                    text = selector.split("'")[1]
+                    element = self.driver.find_element(By.XPATH, f"//button[contains(text(), '{text}')]")
+                else:
+                    element = self.driver.find_element(By.CSS_SELECTOR, selector)
+                
+                self.logger.debug(f"送信ボタンを発見: {selector}")
+                return element
+            except NoSuchElementException:
+                continue
+                
+        self.logger.warning("送信ボタンが見つかりません")
+        return None
+    
+    def check_for_error_message(self):
+        """エラーメッセージをチェック"""
+        error_selectors = [
+            "//*[contains(text(), '応答の生成中にエラーが発生しました')]",
+            "//*[contains(text(), 'エラーが発生しました')]",
+            ".error-message",
+            ".alert-error"
+        ]
+        
+        for selector in error_selectors:
+            try:
+                if selector.startswith("//"):
+                    element = self.driver.find_element(By.XPATH, selector)
+                else:
+                    element = self.driver.find_element(By.CSS_SELECTOR, selector)
+                    
+                if element.is_displayed():
+                    self.logger.warning(f"エラーメッセージを検出: {element.text}")
+                    return True
+            except NoSuchElementException:
+                continue
+                
+        return False
+    
+    def find_regenerate_button(self):
+        """応答を再生成ボタンを探す"""
+        selectors = [
+            "//*[contains(text(), '応答を再生成')]",
+            "//*[contains(text(), '再生成')]",
+            "//*[contains(text(), 'Regenerate')]",
+            ".regenerate-button"
+        ]
+        
+        for selector in selectors:
+            try:
+                if selector.startswith("//"):
+                    element = self.driver.find_element(By.XPATH, selector)
+                else:
+                    element = self.driver.find_element(By.CSS_SELECTOR, selector)
+                    
+                self.logger.debug(f"再生成ボタンを発見: {selector}")
+                return element
+            except NoSuchElementException:
+                continue
+                
+        self.logger.warning("再生成ボタンが見つかりません")
+        return None
+    
+    def get_response_text(self):
+        """応答テキストを取得"""
+        response_selectors = [
+            ".response-content",
+            ".message-content",
+            ".output-text",
+            ".result",
+            "[data-testid='conversation-turn-content']"
+        ]
+        
+        for selector in response_selectors:
+            try:
+                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                if elements:
+                    # 最後の要素（最新の応答）を取得
+                    response_text = elements[-1].text
+                    if response_text and "応答の生成中にエラーが発生しました" not in response_text:
+                        self.logger.info(f"応答テキストを取得: {len(response_text)}文字")
+                        return response_text
+            except Exception as e:
+                self.logger.debug(f"応答テキスト取得エラー: {e}")
+                continue
+                
+        self.logger.warning("応答テキストが見つかりません")
+        return None
+    
+    def save_to_markdown(self, text, prompt):
+        """テキストをMarkdownファイルに保存"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"output_{timestamp}.md"
+        
+        output_dir = Path("outputs")
+        output_dir.mkdir(exist_ok=True)
+        
+        filepath = output_dir / filename
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(f"# 自動取得結果\\n\\n")
+            f.write(f"**日時**: {datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}\\n\\n")
+            f.write(f"**プロンプト**: {prompt}\\n\\n")
+            f.write(f"---\\n\\n")
+            f.write(text)
+            
+        self.logger.info(f"ファイルを保存しました: {filepath}")
+        return filepath
+    
+    def process_site(self, prompt_text):
+        """サイトを処理（メイン処理）"""
+        max_retries = 10
+        retry_count = 0
+        
+        # テキスト入力フィールドを探す
+        text_input = self.find_text_input()
+        if not text_input:
+            self.logger.error("テキスト入力フィールドが見つかりません")
+            return False
+            
+        # プロンプトを入力
+        text_input.clear()
+        text_input.send_keys(prompt_text)
+        self.logger.info(f"プロンプトを入力: {prompt_text[:50]}...")
+        
+        # 送信ボタンをクリック
+        submit_button = self.find_submit_button()
+        if submit_button:
+            submit_button.click()
+            self.logger.info("送信ボタンをクリックしました")
+        else:
+            self.logger.error("送信ボタンが見つかりません")
+            return False
+            
+        # 応答を待機し、エラーチェック
+        while retry_count < max_retries:
+            time.sleep(3)  # 応答を待つ
+            
+            if self.check_for_error_message():
+                retry_count += 1
+                self.logger.warning(f"エラー検出、再試行 {retry_count}/{max_retries}")
+                
+                # 再生成ボタンをクリック
+                regenerate_button = self.find_regenerate_button()
+                if regenerate_button:
+                    regenerate_button.click()
+                    self.logger.info("再生成ボタンをクリックしました")
+                    time.sleep(5)  # 再生成の待機時間
+                else:
+                    self.logger.error("再生成ボタンが見つかりません")
+                    break
+            else:
+                # エラーメッセージが無い場合、応答テキストを取得
+                response_text = self.get_response_text()
+                if response_text:
+                    filepath = self.save_to_markdown(response_text, prompt_text)
+                    self.logger.info("処理が正常に完了しました")
+                    return True
+                else:
+                    self.logger.warning("応答テキストが取得できませんでした")
+                    time.sleep(2)
+                    
+        self.logger.error(f"最大試行回数({max_retries})に達しました")
+        return False
+    
+    def close(self):
+        """ブラウザを閉じる"""
+        if self.driver:
+            self.driver.quit()
+            self.logger.info("ブラウザを閉じました")
+
+
+def main():
+    """メイン関数"""
+    tool = ChromeAutomationTool(debug=True)
+    
+    try:
+        # Chromeブラウザを起動
+        if not tool.launch_chrome():
+            return
+            
+        # ユーザーが手動でサイトを開くまで待機
+        tool.wait_for_user_navigation()
+        
+        # プロンプトを入力
+        prompt = input("送信するプロンプトを入力してください: ")
+        
+        # サイトを処理
+        success = tool.process_site(prompt)
+        
+        if success:
+            print("処理が正常に完了しました！")
+        else:
+            print("処理中にエラーが発生しました")
+            
+    except KeyboardInterrupt:
+        print("\\n処理を中断しました")
+        
+    finally:
+        tool.close()
+
+
+if __name__ == "__main__":
+    main()
