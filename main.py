@@ -170,6 +170,11 @@ class ChromeAutomationTool:
             
             self.wait = WebDriverWait(self.driver, 10)
             
+            # 自動的にGenspark.aiのチャットページを開く
+            target_url = "https://www.genspark.ai/agents?type=moa_chat"
+            self.logger.info(f"Genspark.aiチャットページを開いています: {target_url}")
+            self.driver.get(target_url)
+            
             self.logger.info("Chromeブラウザを起動しました")
             return True
             
@@ -181,13 +186,13 @@ class ChromeAutomationTool:
             return False
     
     def wait_for_user_navigation(self):
-        """ユーザーが手動でサイトを開くまで待機"""
-        print("\\n手動で目的のサイトを開いてください...")
-        print("サイトを開いたらEnterキーを押してください: ")
-        input()
-        
+        """ユーザーがページの準備完了を確認するまで待機"""
         current_url = self.driver.current_url
         self.logger.info(f"現在のURL: {current_url}")
+        
+        print("\\nGenspark.aiチャットページが開きました。")
+        print("ページが完全に読み込まれたらEnterキーを押してください: ")
+        input()
         
     def find_text_input(self):
         """テキスト入力フィールドを探す"""
