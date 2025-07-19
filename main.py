@@ -338,15 +338,25 @@ class ChromeAutomationTool:
     
     def find_regenerate_button(self):
         """応答を再生成ボタンを探す（改善版）"""
+        # HTMLから分析した具体的なセレクター
         selectors = [
+            # Genspark.ai固有の構造
+            ".bubble.retry .button",
+            ".bubble.retry div.button",
+            ".bubble[class*='retry'] .button",
+            # テキストベースの検索
             "//*[contains(text(), '応答を再生成')]",
             "//*[contains(text(), '再生成')]", 
             "//*[contains(text(), 'Regenerate')]",
             "//*[contains(text(), 'regenerate')]",
+            # 一般的なセレクター
             ".regenerate-button",
             "[class*='regenerate']",
             "button[aria-label*='再生成']",
-            "button[title*='再生成']"
+            "button[title*='再生成']",
+            # より幅広い検索
+            ".retry .button",
+            "div.button[class*='retry']"
         ]
         
         for selector in selectors:
@@ -358,14 +368,36 @@ class ChromeAutomationTool:
                 
                 # 表示されているボタンを探す
                 for element in elements:
-                    if element.is_displayed() and element.is_enabled():
+                    if element.is_displayed():
                         button_text = element.text.strip()
                         self.logger.info(f"再生成ボタンを発見: '{button_text}' (セレクター: {selector})")
-                        return element
+                        
+                        # 「応答を再生成」テキストを含むかチェック
+                        if "再生成" in button_text or "regenerate" in button_text.lower():
+                            self.logger.info(f"✓ 有効な再生成ボタンを確認: '{button_text}'")
+                            return element
+                        else:
+                            self.logger.debug(f"テキストが一致しない: '{button_text}'")
                         
             except Exception as e:
                 self.logger.debug(f"再生成ボタン検索エラー ({selector}): {e}")
                 continue
+        
+        # 最後の手段: retry クラスを持つ要素内で「応答を再生成」テキストを含む要素を探す
+        try:
+            retry_elements = self.driver.find_elements(By.CSS_SELECTOR, ".retry")
+            for retry_element in retry_elements:
+                if retry_element.is_displayed():
+                    all_text = retry_element.text
+                    if "応答を再生成" in all_text:
+                        # retry要素内のボタンやクリック可能な要素を探す
+                        clickable_elements = retry_element.find_elements(By.CSS_SELECTOR, ".button, button, div[class*='button'], [role='button']")
+                        for clickable in clickable_elements:
+                            if clickable.is_displayed() and "再生成" in clickable.text:
+                                self.logger.info(f"✓ retry要素内で再生成ボタンを発見: '{clickable.text}'")
+                                return clickable
+        except Exception as e:
+            self.logger.debug(f"retry要素検索エラー: {e}")
                 
         self.logger.debug("再生成ボタンが見つかりません")
         return None
