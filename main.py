@@ -71,29 +71,46 @@ class ChromeAutomationTool:
             except:
                 self.logger.warning("webdriver-managerバージョンが取得できませんでした")
             
-            # ChromeDriverManagerの設定（バージョンに応じて分岐）
-            self.logger.info("ChromeDriverをダウンロード中...")
+            # ChromeDriverのパスを取得（手動インストール優先）
+            chrome_driver_path = None
             
-            try:
-                # 新しいバージョンのwebdriver-managerを試す
-                if system == "Darwin" and machine == "arm64":
-                    self.logger.info("Mac M1/M2用のChromeDriverを取得します")
-                    chrome_driver_path = ChromeDriverManager(os_type="mac-arm64").install()
-                elif system == "Darwin":
-                    self.logger.info("Intel Mac用のChromeDriverを取得します")
-                    chrome_driver_path = ChromeDriverManager(os_type="mac64").install()
-                elif system == "Linux":
-                    self.logger.info("Linux用のChromeDriverを取得します")
-                    chrome_driver_path = ChromeDriverManager(os_type="linux64").install()
-                else:
-                    self.logger.info("自動検出でChromeDriverを取得します")
+            # 1. 手動インストールされたChromeDriverを確認
+            manual_paths = [
+                "/usr/local/bin/chromedriver",
+                "/opt/homebrew/bin/chromedriver",
+                "/usr/bin/chromedriver"
+            ]
+            
+            for path in manual_paths:
+                if os.path.exists(path) and os.access(path, os.X_OK):
+                    chrome_driver_path = path
+                    self.logger.info(f"手動インストールされたChromeDriverを使用: {chrome_driver_path}")
+                    break
+            
+            # 2. 手動インストールが見つからない場合はwebdriver-managerを使用
+            if not chrome_driver_path:
+                self.logger.info("ChromeDriverをダウンロード中...")
+                
+                try:
+                    # 新しいバージョンのwebdriver-managerを試す
+                    if system == "Darwin" and machine == "arm64":
+                        self.logger.info("Mac M1/M2用のChromeDriverを取得します")
+                        chrome_driver_path = ChromeDriverManager(os_type="mac-arm64").install()
+                    elif system == "Darwin":
+                        self.logger.info("Intel Mac用のChromeDriverを取得します")
+                        chrome_driver_path = ChromeDriverManager(os_type="mac64").install()
+                    elif system == "Linux":
+                        self.logger.info("Linux用のChromeDriverを取得します")
+                        chrome_driver_path = ChromeDriverManager(os_type="linux64").install()
+                    else:
+                        self.logger.info("自動検出でChromeDriverを取得します")
+                        chrome_driver_path = ChromeDriverManager().install()
+                        
+                except TypeError as e:
+                    # 古いバージョンのwebdriver-managerの場合
+                    self.logger.warning(f"os_typeパラメータが使用できません: {e}")
+                    self.logger.info("互換性モードでChromeDriverを取得します")
                     chrome_driver_path = ChromeDriverManager().install()
-                    
-            except TypeError as e:
-                # 古いバージョンのwebdriver-managerの場合
-                self.logger.warning(f"os_typeパラメータが使用できません: {e}")
-                self.logger.info("互換性モードでChromeDriverを取得します")
-                chrome_driver_path = ChromeDriverManager().install()
             
             self.logger.info(f"ChromeDriverManagerが返したパス: {chrome_driver_path}")
             
