@@ -362,6 +362,16 @@ class ChromeAutomationTool:
         
         self.logger.info(f"=== 再生成ボタン検索開始 (呼び出し{self._regenerate_button_call_count}回目) ===")
         
+        # Thinking中は再生成ボタンチェックをスキップ
+        try:
+            thinking_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Thinking')]")
+            visible_thinking = [elem for elem in thinking_elements if elem.is_displayed()]
+            if visible_thinking:
+                self.logger.info("Thinking中のため再生成ボタンチェックをスキップ")
+                return None
+        except Exception as e:
+            self.logger.debug(f"Thinkingチェックエラー: {e}")
+        
         # まず全体的なデバッグ情報を取得
         try:
             all_retry_elements = self.driver.find_elements(By.CSS_SELECTOR, "*[class*='retry']")
@@ -1236,12 +1246,19 @@ class ChromeAutomationTool:
         """応答テキストを取得（ストリーミング対応）"""
         # 強化されたエラーメッセージチェック
         try:
-            # 再生成ボタンや関連エラーメッセージを検出
+            # Thinking中はエラーチェックをスキップ
+            thinking_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Thinking')]")
+            visible_thinking = [elem for elem in thinking_elements if elem.is_displayed()]
+            if visible_thinking:
+                self.logger.info("Thinking中のためエラーチェックをスキップしてストリーミング待機")
+                latest_response_text = self.get_latest_message_content()
+                return latest_response_text
+            
+            # 再生成ボタンや関連エラーメッセージを検出（より厳格に）
             error_selectors = [
                 "//*[contains(text(), '応答の生成中にエラーが発生')]",
-                "//*[contains(text(), '再生成')]", 
-                "//*[contains(text(), '応答を再生成')]",
-                "*[class*='retry']",
+                "//*[contains(text(), '応答を再生成') and @role='button']",  # ボタン要素のみ
+                "*[class*='retry'][class*='bubble']",  # より具体的
                 ".bubble.retry"
             ]
             

@@ -107,10 +107,9 @@ class AutomationGUI:
                 else:
                     self.status_queue.put(f"⚠️ エラー検出: {response_text if response_text else 'None'}")
                 
-                # フォールバック処理の条件を強化（再生成エラーを明示的に含める）
+                # フォールバック処理の条件を厳格化：再生成エラーが明確に検出された場合のみ実行
                 if (use_fallback and fallback_message.strip() and 
-                    (not success or response_text == "REGENERATE_ERROR_DETECTED" or 
-                     (response_text and "応答の生成中にエラーが発生" in response_text))):
+                    response_text == "REGENERATE_ERROR_DETECTED"):
                     # フォールバックメッセージを自動送信
                     self.status_queue.put("🔄 フォールバックメッセージを自動送信中...")
                     
