@@ -9,6 +9,7 @@ import time
 import logging
 import os
 import platform
+import random
 from datetime import datetime
 from pathlib import Path
 from selenium import webdriver
@@ -336,28 +337,79 @@ class ChromeAutomationTool:
         return False
     
     def find_regenerate_button(self):
-        """応答を再生成ボタンを探す"""
+        """応答を再生成ボタンを探す（改善版）"""
         selectors = [
             "//*[contains(text(), '応答を再生成')]",
-            "//*[contains(text(), '再生成')]",
+            "//*[contains(text(), '再生成')]", 
             "//*[contains(text(), 'Regenerate')]",
-            ".regenerate-button"
+            "//*[contains(text(), 'regenerate')]",
+            ".regenerate-button",
+            "[class*='regenerate']",
+            "button[aria-label*='再生成']",
+            "button[title*='再生成']"
         ]
         
         for selector in selectors:
             try:
                 if selector.startswith("//"):
-                    element = self.driver.find_element(By.XPATH, selector)
+                    elements = self.driver.find_elements(By.XPATH, selector)
                 else:
-                    element = self.driver.find_element(By.CSS_SELECTOR, selector)
-                    
-                self.logger.debug(f"再生成ボタンを発見: {selector}")
-                return element
-            except NoSuchElementException:
+                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                
+                # 表示されているボタンを探す
+                for element in elements:
+                    if element.is_displayed() and element.is_enabled():
+                        button_text = element.text.strip()
+                        self.logger.info(f"再生成ボタンを発見: '{button_text}' (セレクター: {selector})")
+                        return element
+                        
+            except Exception as e:
+                self.logger.debug(f"再生成ボタン検索エラー ({selector}): {e}")
                 continue
                 
-        self.logger.warning("再生成ボタンが見つかりません")
+        self.logger.debug("再生成ボタンが見つかりません")
         return None
+
+    def handle_regenerate_with_retry(self, max_retries=5):
+        """再生成ボタンの自動リトライ処理"""
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            # 再生成ボタンが表示されているかチェック
+            regenerate_button = self.find_regenerate_button()
+            
+            if not regenerate_button:
+                # 再生成ボタンがない場合は正常な応答が生成されたと判断
+                self.logger.info("再生成ボタンが見つからないため、正常な応答と判断します")
+                return True
+                
+            retry_count += 1
+            self.logger.warning(f"再生成ボタンを検出しました。リトライ {retry_count}/{max_retries}")
+            
+            # ランダムな待機時間（1-5秒）
+            wait_time = random.uniform(1, 5)
+            self.logger.info(f"ランダム待機: {wait_time:.1f}秒")
+            time.sleep(wait_time)
+            
+            try:
+                # 再生成ボタンをクリック
+                regenerate_button.click()
+                self.logger.info(f"再生成ボタンをクリックしました (試行 {retry_count})")
+                
+                # クリック後、少し待機して新しい応答の生成を待つ
+                time.sleep(3)
+                
+            except Exception as e:
+                self.logger.error(f"再生成ボタンクリック中にエラー: {e}")
+                # エラーでもリトライを続行
+                continue
+        
+        # 最大リトライ回数に達した場合
+        self.logger.error(f"再生成ボタンが{max_retries}回連続で表示されました。サーバーに問題がある可能性があります。")
+        print(f"\n❌ エラー: 再生成ボタンが{max_retries}回連続で表示されました。")
+        print("サーバー側に問題がある可能性があります。しばらく時間をおいてから再試行してください。")
+        print("ツールを終了します。")
+        return False
     
     def wait_for_streaming_response_complete(self, response_element_selector, timeout=60):
         """ストリーミング応答が完了するまで待機（Stale Element対策）"""
@@ -1201,9 +1253,6 @@ class ChromeAutomationTool:
     
     def process_single_prompt(self, prompt_text):
         """単一のプロンプトを処理（メイン処理）"""
-        max_retries = 10
-        retry_count = 0
-        
         # プロンプト送信前の既存応答数とコピーボタン数を記録
         self.existing_response_count = self.count_existing_responses()
         self.existing_copy_button_count = self.count_existing_copy_buttons()
@@ -1236,38 +1285,25 @@ class ChromeAutomationTool:
             self.logger.error("送信ボタンが見つかりません")
             return False
             
-        # 応答を待機し、エラーチェック
-        while retry_count < max_retries:
-            time.sleep(3)  # 応答を待つ
-            
-            if self.check_for_error_message():
-                retry_count += 1
-                self.logger.warning(f"エラー検出、再試行 {retry_count}/{max_retries}")
-                
-                # 再生成ボタンをクリック
-                regenerate_button = self.find_regenerate_button()
-                if regenerate_button:
-                    regenerate_button.click()
-                    self.logger.info("再生成ボタンをクリックしました")
-                    time.sleep(5)  # 再生成の待機時間
-                else:
-                    self.logger.error("再生成ボタンが見つかりません")
-                    break
-            else:
-                # エラーメッセージが無い場合、応答テキストを取得
-                response_text = self.get_response_text()
-                if response_text:
-                    filepath = self.save_to_markdown(response_text, prompt_text)
-                    self.logger.info("処理が正常に完了しました")
-                    return True
-                else:
-                    self.logger.warning("応答テキストが取得できませんでした")
-                    # デバッグ情報を出力してページ構造を確認
-                    self.debug_page_structure()
-                    time.sleep(2)
-                    
-        self.logger.error(f"最大試行回数({max_retries})に達しました")
-        return False
+        # 少し待機してから応答をチェック
+        time.sleep(3)
+        
+        # 自動リトライ機能を実行（再生成ボタンが表示された場合の処理）
+        if not self.handle_regenerate_with_retry():
+            # 5回連続で再生成ボタンが表示された場合は処理を終了
+            return False
+        
+        # 正常な応答テキストを取得
+        response_text = self.get_response_text()
+        if response_text:
+            filepath = self.save_to_markdown(response_text, prompt_text)
+            self.logger.info("処理が正常に完了しました")
+            return True
+        else:
+            self.logger.warning("応答テキストが取得できませんでした")
+            # デバッグ情報を出力してページ構造を確認
+            self.debug_page_structure()
+            return False
 
     def process_continuous_prompts(self):
         """継続的にプロンプトを処理する"""
@@ -1297,16 +1333,13 @@ class ChromeAutomationTool:
                 
                 if success:
                     print(f"✅ プロンプト {prompt_count} の応答が正常に保存されました！")
-                else:
+                elif success is False:
                     print(f"❌ プロンプト {prompt_count} の処理中にエラーが発生しました")
                     
-                    # エラー時の対応を確認
-                    retry_input = input("再試行しますか？ (y/n): ").strip().lower()
-                    if retry_input in ['y', 'yes', 'はい']:
-                        prompt_count -= 1  # カウントを戻す
-                        continue
-                    else:
-                        break
+                    # process_single_promptがFalseを返した場合の詳細チェック
+                    # 5回連続再生成エラーの場合は自動終了
+                    print("処理を終了します。")
+                    break
                         
             except KeyboardInterrupt:
                 print("\n\nCtrl+Cが押されました。処理を中断しています...")
