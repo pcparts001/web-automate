@@ -1159,6 +1159,7 @@ class ChromeAutomationTool:
                         self.logger.info(f"要素{i+1}: ID={content_id}, テキスト長={len(text_content)}文字, クラス={element_classes}")
                         masked_preview = self.mask_text_for_debug(text_content)
                         self.logger.info(f"  プレビュー: {masked_preview}")
+                        self.logger.debug(f"  [HTML]: {element.get_attribute('outerHTML')}")
                         
                         # エラーメッセージやThinking中のメッセージは候補から除外
                         is_thinking_or_error = False
@@ -1195,6 +1196,7 @@ class ChromeAutomationTool:
             for content_id, element, text_content in elements_with_id:
                 masked_content = self.mask_text_for_debug(text_content, max_preview=10)
                 self.logger.info(f"ID={content_id}: {masked_content}")
+                self.logger.debug(f"  [HTML]: {element.get_attribute('outerHTML')}")
             
             # プロンプト送信後に新しく現れた応答らしい要素を探す
             new_elements = []
