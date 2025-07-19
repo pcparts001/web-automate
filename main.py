@@ -33,6 +33,8 @@ class ChromeAutomationTool:
         self.prompt_counter = 0  # プロンプトカウンター
         self.existing_response_count = 0  # プロンプト送信前の既存応答数
         self.existing_copy_button_count = 0  # プロンプト送信前の既存コピーボタン数
+        self.current_retry_count = 0  # 現在のリトライ回数
+        self.max_regenerate_retries = 5  # 最大リトライ回数
         self.setup_logging()
         
     def setup_logging(self):
@@ -493,10 +495,10 @@ class ChromeAutomationTool:
     def handle_regenerate_with_retry(self, max_retries=5):
         """再生成ボタンの自動リトライ処理"""
         self.logger.info("=== 再生成ボタン自動リトライ処理開始 ===")
-        retry_count = 0
+        self.current_retry_count = 0
         
-        while retry_count < max_retries:
-            self.logger.info(f"リトライループ {retry_count + 1}/{max_retries} を開始")
+        while self.current_retry_count < max_retries:
+            self.logger.info(f"リトライループ {self.current_retry_count + 1}/{max_retries} を開始")
             
             # 再生成ボタンが表示されているかチェック
             regenerate_button = self.find_regenerate_button()
@@ -506,8 +508,8 @@ class ChromeAutomationTool:
                 self.logger.info("再生成ボタンが見つからないため、正常な応答と判断します")
                 return True
                 
-            retry_count += 1
-            self.logger.warning(f"再生成ボタンを検出しました。リトライ {retry_count}/{max_retries}")
+            self.current_retry_count += 1
+            self.logger.warning(f"再生成ボタンを検出しました。リトライ {self.current_retry_count}/{max_retries}")
             
             # ランダムな待機時間（1-5秒）
             wait_time = random.uniform(1, 5)
@@ -519,7 +521,7 @@ class ChromeAutomationTool:
                 success = False
                 try:
                     regenerate_button.click()
-                    self.logger.info(f"通常クリックで再生成ボタンをクリックしました (試行 {retry_count})")
+                    self.logger.info(f"通常クリックで再生成ボタンをクリックしました (試行 {self.current_retry_count})")
                     success = True
                 except Exception as click_error:
                     self.logger.warning(f"通常クリック失敗: {click_error}")
@@ -527,7 +529,7 @@ class ChromeAutomationTool:
                     # JavaScript クリックを試す
                     try:
                         self.driver.execute_script("arguments[0].click();", regenerate_button)
-                        self.logger.info(f"JavaScriptクリックで再生成ボタンをクリックしました (試行 {retry_count})")
+                        self.logger.info(f"JavaScriptクリックで再生成ボタンをクリックしました (試行 {self.current_retry_count})")
                         success = True
                     except Exception as js_error:
                         self.logger.error(f"JavaScriptクリック失敗: {js_error}")
@@ -537,7 +539,7 @@ class ChromeAutomationTool:
                             # 要素にフォーカスを当ててからクリック
                             self.driver.execute_script("arguments[0].focus();", regenerate_button)
                             self.driver.execute_script("arguments[0].dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));", regenerate_button)
-                            self.logger.info(f"強制イベントで再生成ボタンをクリックしました (試行 {retry_count})")
+                            self.logger.info(f"強制イベントで再生成ボタンをクリックしました (試行 {self.current_retry_count})")
                             success = True
                         except Exception as force_error:
                             self.logger.error(f"強制クリック失敗: {force_error}")
@@ -546,7 +548,7 @@ class ChromeAutomationTool:
                     # クリック後、少し待機して新しい応答の生成を待つ
                     time.sleep(3)
                 else:
-                    self.logger.error(f"すべてのクリック方法が失敗しました (試行 {retry_count})")
+                    self.logger.error(f"すべてのクリック方法が失敗しました (試行 {self.current_retry_count})")
                     continue
                 
             except Exception as e:
@@ -1020,7 +1022,7 @@ class ChromeAutomationTool:
             self.logger.debug(f"要素後コピーボタン検索エラー: {e}")
             return False
 
-    def get_latest_message_content(self):
+    def get_latest_message_content(self, wait_for_streaming=True):
         """message-content-id属性を持つ要素から最新の応答を取得"""
         try:
             # message-content-id属性を持つすべての要素を取得
@@ -1137,19 +1139,25 @@ class ChromeAutomationTool:
             # セレクター文字列を作成
             selector = f"[message-content-id='{latest_id}']"
             
-            # ストリーミング応答の完了を待機
-            final_text = self.wait_for_streaming_response_complete(selector)
-            
-            if final_text == "REGENERATE_ERROR_DETECTED":
-                # 再生成エラーが検出された場合はNoneを返してリトライを促す
-                self.logger.warning("再生成エラーが検出されました - リトライが必要です")
-                return None
-            elif final_text and "応答の生成中にエラーが発生しました" not in final_text:
-                self.logger.info(f"🎯 ストリーミング完了後のテキスト長: {len(final_text)}文字")
-                return final_text
+            if wait_for_streaming:
+                # ストリーミング応答の完了を待機
+                self.logger.info("ストリーミング応答の完了を待機中...")
+                final_text = self.wait_for_streaming_response_complete(selector)
+                
+                if final_text == "REGENERATE_ERROR_DETECTED":
+                    # 再生成エラーが検出された場合はNoneを返してリトライを促す
+                    self.logger.warning(f"再生成エラーが検出されました - リトライが必要です ({self.current_retry_count}回目)")
+                    return None
+                elif final_text and "応答の生成中にエラーが発生しました" not in final_text:
+                    self.logger.info(f"🎯 ストリーミング完了後のテキスト長: {len(final_text)}文字")
+                    return final_text
+                else:
+                    # ストリーミング検出に失敗した場合は、現在のテキストを返す
+                    self.logger.warning("ストリーミング検出失敗、現在のテキストを返します")
+                    return self.clean_response_text(latest_text)
             else:
-                # ストリーミング検出に失敗した場合は、現在のテキストを返す
-                self.logger.warning("ストリーミング検出失敗、現在のテキストを返します")
+                # ストリーミング待機をスキップして現在のテキストを返す
+                self.logger.info(f"🎯 ストリーミング待機をスキップ - 現在のテキスト長: {len(latest_text)}文字")
                 return self.clean_response_text(latest_text)
                 
         except Exception as e:

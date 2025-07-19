@@ -128,14 +128,14 @@ class AutomationGUI:
                             # 少し待機してから応答をチェック（短縮）
                             time.sleep(3)
                             
-                            # 簡潔な応答取得（リトライは行わない）
+                            # 簡潔な応答取得（ストリーミング待機をスキップ）
                             self.status_queue.put("⏳ フォールバック応答を取得中...")
-                            fallback_response_text = self.tool.get_latest_message_content()
+                            fallback_response_text = self.tool.get_latest_message_content(wait_for_streaming=False)
                             
                             # 応答が取得できない場合は少し待ってもう一度試す
                             if not fallback_response_text:
                                 time.sleep(2)
-                                fallback_response_text = self.tool.get_latest_message_content()
+                                fallback_response_text = self.tool.get_latest_message_content(wait_for_streaming=False)
                             
                             if isinstance(fallback_response_text, tuple):
                                 # タプルの場合は2番目の要素（応答テキスト）を取得
