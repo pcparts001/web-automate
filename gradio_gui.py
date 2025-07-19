@@ -109,9 +109,13 @@ class AutomationGUI:
                         # 直接テキスト入力と送信を実行（既存のロジックを使用）
                         self.status_queue.put("📝 フォールバックテキスト入力中...")
                         
-                        # フォールバック送信前に状態をリセット
+                        # フォールバック送信前に状態をリセット（元プロンプトは保持）
                         self.tool.existing_response_count = self.tool.count_existing_responses()
+                        # current_prompt_textはフォールバックメッセージで更新しつつ、original_user_promptは保持
                         self.tool.current_prompt_text = fallback_message.strip()
+                        self.status_queue.put(f"🔍 [DEBUG] フォールバックメッセージ設定: {self.tool.mask_text_for_debug(fallback_message)}")
+                        if hasattr(self.tool, 'original_user_prompt'):
+                            self.status_queue.put(f"🔍 [DEBUG] 元ユーザープロンプト保持: {self.tool.mask_text_for_debug(self.tool.original_user_prompt)}")
                         
                         # テキスト入力フィールドを取得
                         text_input = self.tool.find_text_input()
@@ -216,8 +220,9 @@ class AutomationGUI:
                                             pre_send_message_count = len(current_message_elements)
                                             self.status_queue.put(f"📊 送信前message-content要素数: {pre_send_message_count}")
                                             
-                                            # 送信前に現在の状態をリセット
+                                            # 送信前に現在の状態をリセット（元プロンプトは保持）
                                             self.tool.existing_response_count = self.tool.count_existing_responses()
+                                            # リトライ時もcurrent_prompt_textのみ更新
                                             self.tool.current_prompt_text = fallback_message.strip()
                                             text_input.clear()
                                             

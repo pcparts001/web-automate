@@ -35,6 +35,7 @@ class ChromeAutomationTool:
         self.existing_copy_button_count = 0  # プロンプト送信前の既存コピーボタン数
         self.current_retry_count = 0  # 現在のリトライ回数
         self.max_regenerate_retries = 5  # 最大リトライ回数
+        self.original_user_prompt = ""  # ユーザーが最初に送信したプロンプト（フォールバック時の区別用）
         self.setup_logging()
     
     def mask_text_for_debug(self, text, max_preview=6):
@@ -1113,16 +1114,44 @@ class ChromeAutomationTool:
                 # 従来のセレクターでの応答要素数なので、message-content-idとは比較できない
                 # 代わりに、プロンプトテキストを含まず、応答らしい内容を持つ要素を最新として扱う
                 
-                # まず、送信したプロンプトテキストが含まれていないかチェック
+                        # まず、送信したプロンプトテキストが含まれていないかチェック（強化版）
                 prompt_check_passed = True
-                if (hasattr(self, 'current_prompt_text') and 
-                    self.current_prompt_text and 
-                    self.current_prompt_text[:30] in text_content):
-                    masked_prompt = self.mask_text_for_debug(self.current_prompt_text)
-                    self.logger.info(f"  ✗ ID={content_id}にプロンプトテキストが含まれています: {masked_prompt}")
-                    prompt_check_passed = False
-                else:
-                    self.logger.info(f"  ✓ ID={content_id}はプロンプトテキストを含みません")
+                
+                # ユーザーの元プロンプトと現在のプロンプトの両方でチェック
+                prompt_texts_to_check = []
+                if hasattr(self, 'original_user_prompt') and self.original_user_prompt:
+                    prompt_texts_to_check.append(('original', self.original_user_prompt))
+                if hasattr(self, 'current_prompt_text') and self.current_prompt_text:
+                    prompt_texts_to_check.append(('current', self.current_prompt_text))
+                
+                for prompt_type, prompt_text in prompt_texts_to_check:
+                    if prompt_text and prompt_text[:30] in text_content:
+                        masked_prompt = self.mask_text_for_debug(prompt_text)
+                        self.logger.info(f"  ✗ ID={content_id}に{prompt_type}プロンプトテキストが含まれています: {masked_prompt}")
+                        prompt_check_passed = False
+                        break
+                
+                # 追加プロンプト検出ヒューリスティック
+                if prompt_check_passed:
+                    # テキストの長さと内容でユーザープロンプトっぽいかチェック
+                    is_user_prompt_like = False
+                    
+                    # 短いテキストで、一般的なプロンプトパターンを含む場合
+                    if len(text_content.strip()) < 200:  # 200文字未満の短いテキスト
+                        prompt_patterns = [
+                            "を書いてください", "を教えて", "どう思いますか", "について",
+                            "write", "tell me", "explain", "how", "what", "please", "?", "？",
+                            "hello", "hi", "こんにちは", "おはよう"
+                        ]
+                        
+                        if any(pattern in text_content.lower() for pattern in prompt_patterns):
+                            is_user_prompt_like = True
+                            self.logger.info(f"  ✗ ID={content_id}はプロンプトパターンを含む短いテキストのため除外")
+                    
+                    if not is_user_prompt_like:
+                        self.logger.info(f"  ✓ ID={content_id}はプロンプトテキストを含みません")
+                    else:
+                        prompt_check_passed = False
                 
                 if prompt_check_passed:
                     element_classes = element.get_attribute("class") or ""
@@ -1278,6 +1307,12 @@ class ChromeAutomationTool:
         self.existing_response_count = self.count_existing_responses()
         self.existing_copy_button_count = self.count_existing_copy_buttons()
         self.current_prompt_text = prompt_text  # 送信するプロンプトテキストを保存
+        
+        # ユーザーの元プロンプトを保存（フォールバック時の区別用）
+        if not hasattr(self, 'original_user_prompt') or not self.original_user_prompt:
+            self.original_user_prompt = prompt_text
+            self.logger.info(f"ユーザー元プロンプトを記録: {self.mask_text_for_debug(self.original_user_prompt)}")
+        
         self.prompt_send_time = time.time()  # プロンプト送信時刻を記録
         self.logger.info(f"プロンプト送信前 - 既存応答数: {self.existing_response_count}, 既存コピーボタン数: {self.existing_copy_button_count}")
         
