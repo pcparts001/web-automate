@@ -1293,16 +1293,25 @@ class ChromeAutomationTool:
         
         # 最新のmessage-content-id要素を直接検索する専用メソッドを最初に試す
         latest_response_text = self.get_latest_message_content()
-        if latest_response_text:
-            return latest_response_text
+        self.logger.info(f"get_latest_message_content()の結果: {self.mask_text_for_debug(latest_response_text) if latest_response_text else 'None'}")
         
-        # get_latest_message_content() が None を返した場合は再生成ボタンをチェック
-        self.logger.warning("get_latest_message_content()がNoneを返しました - 再生成ボタンをチェック")
+        # 応答が取得できた場合でも、エラーメッセージでないか確認
+        if latest_response_text:
+            if "応答の生成中にエラーが発生" in latest_response_text:
+                self.logger.warning("取得した応答にエラーメッセージが含まれています - 再生成ボタンをチェック")
+            else:
+                self.logger.info("有効な応答を取得 - 再生成ボタンチェックをスキップ")
+                return latest_response_text
+        
+        # 応答が取得できない場合、またはエラーメッセージの場合は再生成ボタンをチェック
+        self.logger.warning("応答が取得できないか、エラーメッセージのため再生成ボタンをチェック")
         
         # 再生成ボタンがあるかチェック
         regenerate_button = self.find_regenerate_button()
+        self.logger.info(f"再生成ボタン検出結果: {bool(regenerate_button)} (型: {type(regenerate_button)})")
+        
         if regenerate_button:
-            self.logger.warning("再生成ボタンを検出 - エラー状態です")
+            self.logger.warning("再生成ボタンを検出 - REGENERATE_ERROR_DETECTEDを返します")
             return "REGENERATE_ERROR_DETECTED"
         
         # 再生成ボタンもない場合は絶対的なエラー
