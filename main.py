@@ -413,19 +413,19 @@ class ChromeAutomationTool:
         
         # HTMLから分析した具体的なセレクター（実際の構造に基づく）
         selectors = [
-            # 最も優先: 完全一致
+            # 最も優先: 実際の構造に完全対応
             "//div[@class='button' and contains(text(), '応答を再生成')]",
-            # Vue.js動的属性対応（data-v-で始まる属性を持つdiv.button）
-            "//div[contains(@class, 'button') and contains(text(), '応答を再生成')]",
-            "//div[starts-with(@data-v-, '') and @class='button' and contains(text(), '応答を再生成')]",
-            # より広範囲
+            # Vue.js動的属性対応（data-v-で始まる任意の属性を持つ）
+            "//div[@class='button' and contains(., '応答を再生成')]",
+            # より柔軟な検索
             "//div[contains(text(), '応答を再生成')]",
+            "//*[@class='button' and contains(text(), '応答を再生成')]",
+            "//*[contains(@class, 'button') and contains(text(), '応答を再生成')]",
             "//*[contains(text(), '応答を再生成')]",
             "//*[contains(text(), '再生成')]",
-            # CSS セレクター（フォールバック）
+            # CSS セレクター版
             "div.button",
-            ".button",
-            "[class*='button']"
+            ".button"
         ]
         
         for selector in selectors:
@@ -447,17 +447,17 @@ class ChromeAutomationTool:
                         
                         self.logger.debug(f"  要素{i+1}: <{tag_name}> class='{class_attr}' displayed={is_displayed} text='{button_text}'")
                         
-                        if is_displayed and button_text:
+                        if is_displayed:
                             self.logger.info(f"表示中の要素発見: '{button_text}' (セレクター: {selector})")
                             
-                            # XPathでテキスト検索の場合は即座に返す
-                            if selector.startswith("//") and ("再生成" in button_text or "regenerate" in button_text.lower()):
-                                self.logger.info(f"✓ XPath検索で有効な再生成ボタンを確認: '{button_text}'")
+                            # 再生成関連のテキストをチェック
+                            if ("応答を再生成" in button_text or "再生成" in button_text or "regenerate" in button_text.lower()):
+                                self.logger.info(f"✓ 再生成ボタンを確認: '{button_text}' (セレクター: {selector})")
                                 return element
                             
-                            # CSS選択の場合はテキストを含むかチェック
-                            elif not selector.startswith("//") and ("再生成" in button_text or "regenerate" in button_text.lower()):
-                                self.logger.info(f"✓ CSS検索で有効な再生成ボタンを確認: '{button_text}'")
+                            # div.button の場合は特別に詳細チェック
+                            elif selector in ["div.button", ".button"] and tag_name == "div" and "button" in class_attr:
+                                self.logger.info(f"✓ div.button要素として再生成ボタンを確認: '{button_text}'")
                                 return element
                             else:
                                 self.logger.debug(f"テキストが一致しない: '{button_text}'")
