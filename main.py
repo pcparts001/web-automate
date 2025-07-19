@@ -1219,17 +1219,23 @@ class ChromeAutomationTool:
                 final_text = self.wait_for_streaming_response_complete(selector)
                 
                 if final_text == "REGENERATE_ERROR_DETECTED":
-                    self.logger.warning(f"再生成エラーが検出されました")
+                    self.logger.warning(f"再生成エラーが検出され���した")
+                    self.logger.debug(f"get_latest_message_content: wait_for_streaming_response_completeからの戻り値: REGENERATE_ERROR_DETECTED")
                     return None
                 elif final_text and "応答の生成中にエラーが発生しました" not in final_text:
                     masked_final = self.mask_text_for_debug(final_text)
                     self.logger.info(f"🎯 ストリーミング完了後: {masked_final}")
+                    self.logger.debug(f"get_latest_message_content: wait_for_streaming_response_completeからの戻り値: {masked_final}")
                     return final_text
                 else:
                     self.logger.warning("ストリーミング検出失敗、現在のテキストを返します")
+                    masked_latest = self.mask_text_for_debug(latest_text)
+                    self.logger.debug(f"get_latest_message_content: ストリーミング検出失敗のためlatest_textを返します: {masked_latest}")
                     return self.clean_response_text(latest_text)
             else:
                 # ストリーミング待機をスキップ
+                masked_latest = self.mask_text_for_debug(latest_text)
+                self.logger.debug(f"get_latest_message_content: ストリーミング待機スキップのためlatest_textを返します: {masked_latest}")
                 return self.clean_response_text(latest_text)
                 
         except Exception as e:
@@ -1243,6 +1249,7 @@ class ChromeAutomationTool:
         self.logger.debug(f"get_response_text: get_latest_message_contentからの戻り値: {self.mask_text_for_debug(latest_response_text) if latest_response_text else 'None'}")
         
         if latest_response_text:
+            self.logger.debug(f"get_response_text: 最終的に返す応答テキスト: {self.mask_text_for_debug(latest_response_text)}")
             return latest_response_text
         
         # 応答が取得できない場合は再生成ボタンをチェック
