@@ -457,9 +457,12 @@ class ChromeAutomationTool:
 
     def handle_regenerate_with_retry(self, max_retries=5):
         """再生成ボタンの自動リトライ処理"""
+        self.logger.info("=== 再生成ボタン自動リトライ処理開始 ===")
         retry_count = 0
         
         while retry_count < max_retries:
+            self.logger.info(f"リトライループ {retry_count + 1}/{max_retries} を開始")
+            
             # 再生成ボタンが表示されているかチェック
             regenerate_button = self.find_regenerate_button()
             
@@ -477,15 +480,42 @@ class ChromeAutomationTool:
             time.sleep(wait_time)
             
             try:
-                # 再生成ボタンをクリック
-                regenerate_button.click()
-                self.logger.info(f"再生成ボタンをクリックしました (試行 {retry_count})")
+                # まず通常のクリックを試す
+                success = False
+                try:
+                    regenerate_button.click()
+                    self.logger.info(f"通常クリックで再生成ボタンをクリックしました (試行 {retry_count})")
+                    success = True
+                except Exception as click_error:
+                    self.logger.warning(f"通常クリック失敗: {click_error}")
+                    
+                    # JavaScript クリックを試す
+                    try:
+                        self.driver.execute_script("arguments[0].click();", regenerate_button)
+                        self.logger.info(f"JavaScriptクリックで再生成ボタンをクリックしました (試行 {retry_count})")
+                        success = True
+                    except Exception as js_error:
+                        self.logger.error(f"JavaScriptクリック失敗: {js_error}")
+                        
+                        # さらに強制的なクリックを試す
+                        try:
+                            # 要素にフォーカスを当ててからクリック
+                            self.driver.execute_script("arguments[0].focus();", regenerate_button)
+                            self.driver.execute_script("arguments[0].dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));", regenerate_button)
+                            self.logger.info(f"強制イベントで再生成ボタンをクリックしました (試行 {retry_count})")
+                            success = True
+                        except Exception as force_error:
+                            self.logger.error(f"強制クリック失敗: {force_error}")
                 
-                # クリック後、少し待機して新しい応答の生成を待つ
-                time.sleep(3)
+                if success:
+                    # クリック後、少し待機して新しい応答の生成を待つ
+                    time.sleep(3)
+                else:
+                    self.logger.error(f"すべてのクリック方法が失敗しました (試行 {retry_count})")
+                    continue
                 
             except Exception as e:
-                self.logger.error(f"再生成ボタンクリック中にエラー: {e}")
+                self.logger.error(f"再生成ボタンクリック処理中にエラー: {e}")
                 # エラーでもリトライを続行
                 continue
         
