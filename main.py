@@ -203,29 +203,63 @@ class ChromeAutomationTool:
     
     def find_submit_button(self):
         """送信ボタンを探す"""
+        # 一般的なボタンセレクター
         selectors = [
             "button[type='submit']",
             "input[type='submit']",
-            "button:contains('送信')",
-            "button:contains('生成')",
-            "button:contains('実行')",
             ".submit-button",
             ".send-button"
         ]
         
+        # テキストベースのボタン検索
+        text_searches = [
+            "送信", "生成", "実行", "Send", "Submit", "Generate", "Run", "Ask", "Chat"
+        ]
+        
+        # まず一般的なセレクターを試す
         for selector in selectors:
             try:
-                if ":contains" in selector:
-                    # XPathを使用してテキストで検索
-                    text = selector.split("'")[1]
-                    element = self.driver.find_element(By.XPATH, f"//button[contains(text(), '{text}')]")
-                else:
-                    element = self.driver.find_element(By.CSS_SELECTOR, selector)
-                
+                element = self.driver.find_element(By.CSS_SELECTOR, selector)
                 self.logger.debug(f"送信ボタンを発見: {selector}")
                 return element
             except NoSuchElementException:
                 continue
+        
+        # テキストベースで検索
+        for text in text_searches:
+            try:
+                element = self.driver.find_element(By.XPATH, f"//button[contains(text(), '{text}')]")
+                self.logger.debug(f"送信ボタンを発見 (テキスト): {text}")
+                return element
+            except NoSuchElementException:
+                continue
+        
+        # より広範囲な検索 - すべてのボタンをチェック
+        try:
+            self.logger.info("すべてのボタンを検索して適切なものを探します...")
+            buttons = self.driver.find_elements(By.TAG_NAME, "button")
+            for button in buttons:
+                button_text = button.text.strip().lower()
+                button_classes = button.get_attribute("class") or ""
+                button_id = button.get_attribute("id") or ""
+                
+                # ボタンの詳細をログ出力
+                self.logger.debug(f"ボタン発見 - テキスト: '{button_text}', クラス: '{button_classes}', ID: '{button_id}'")
+                
+                # 送信系のキーワードをチェック
+                submit_keywords = ["send", "submit", "chat", "ask", "generate", "run", "送信", "生成", "実行"]
+                if any(keyword in button_text for keyword in submit_keywords) or \
+                   any(keyword in button_classes.lower() for keyword in submit_keywords) or \
+                   any(keyword in button_id.lower() for keyword in submit_keywords):
+                    self.logger.info(f"適切な送信ボタンを発見: テキスト='{button_text}', クラス='{button_classes}'")
+                    return button
+                    
+            # Enterキーでの送信を試すため、Noneではなく代替手段を提供
+            self.logger.warning("明確な送信ボタンが見つかりません。Enterキー送信を試します。")
+            return "ENTER_KEY"  # 特別な値を返す
+            
+        except Exception as e:
+            self.logger.error(f"ボタン検索中にエラー: {e}")
                 
         self.logger.warning("送信ボタンが見つかりません")
         return None
@@ -342,7 +376,12 @@ class ChromeAutomationTool:
         
         # 送信ボタンをクリック
         submit_button = self.find_submit_button()
-        if submit_button:
+        if submit_button == "ENTER_KEY":
+            # Enterキーを送信
+            from selenium.webdriver.common.keys import Keys
+            text_input.send_keys(Keys.RETURN)
+            self.logger.info("Enterキーで送信しました")
+        elif submit_button:
             submit_button.click()
             self.logger.info("送信ボタンをクリックしました")
         else:
