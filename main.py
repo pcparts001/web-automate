@@ -362,7 +362,7 @@ class ChromeAutomationTool:
         
         previous_text = ""
         stable_count = 0
-        required_stable_count = 3  # 3回連続でテキストが変わらなければ完了と判定
+        required_stable_count = 2  # 2回連続でテキストが変わらなければ完了と判定（短縮）
         check_interval = 2  # 2秒間隔でチェック
         max_checks = timeout // check_interval
         
@@ -496,12 +496,68 @@ class ChromeAutomationTool:
                 
                 self.logger.debug(f"チェック {i+1}/{max_checks}: テキスト長={current_length}文字")
                 
+                # 生成中フラグを初期化
+                is_still_generating = False
+                
+                # Genspark.ai固有の完了判定：「コピー」ボタンの検出
+                try:
+                    copy_buttons = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'コピー') or contains(text(), 'Copy')]")
+                    visible_copy_buttons = [btn for btn in copy_buttons if btn.is_displayed()]
+                    
+                    if visible_copy_buttons and current_length > 100:  # コピーボタンがあり、十分なテキストがある
+                        self.logger.info(f"コピーボタンを検出 - 応答完了と判定（{current_length}文字）")
+                        return current_text
+                        
+                except Exception as e:
+                    self.logger.debug(f"コピーボタン検出エラー: {e}")
+                
+                # Genspark.ai固有の生成中インジケーター検出
+                genspark_loading_indicators = [
+                    "thinking...", "thinking", "考え中", "生成中", "█"
+                ]
+                
+                # テキスト内とページ内での「Thinking...」検出
+                page_text = ""
+                try:
+                    page_text = self.driver.page_source.lower()
+                except:
+                    pass
+                
+                for indicator in genspark_loading_indicators:
+                    # 現在のテキスト内でのチェック
+                    if indicator.lower() in current_text.lower():
+                        if len(current_text.strip()) < 50:  # 短いテキストの場合のみ生成中と判定
+                            is_still_generating = True
+                            self.logger.debug(f"テキスト内生成中インジケーター検出: {indicator}")
+                            break
+                    
+                    # ページ内での「thinking」チェック（より限定的）
+                    if indicator == "thinking" and "thinking..." in page_text:
+                        # 「Thinking...」要素を具体的に検索
+                        try:
+                            thinking_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Thinking') or contains(text(), 'thinking')]")
+                            visible_thinking = [elem for elem in thinking_elements if elem.is_displayed() and ("thinking" in elem.text.lower() or "█" in elem.text)]
+                            
+                            if visible_thinking:
+                                is_still_generating = True
+                                self.logger.debug("Thinking...インジケーターを検出")
+                                break
+                        except:
+                            pass
+                
                 # 前回と同じテキストかチェック
                 if current_text == previous_text and current_length > 0:
                     stable_count += 1
                     self.logger.debug(f"安定カウント: {stable_count}/{required_stable_count}")
                     
-                    if stable_count >= required_stable_count:
+                    # 長いテキストの場合は早期完了（1回の安定で十分）
+                    early_completion_threshold = 500  # 500文字以上
+                    if current_length >= early_completion_threshold and stable_count >= 1 and not is_still_generating:
+                        self.logger.info(f"長いテキストの早期完了判定（{current_length}文字）")
+                        return current_text
+                    
+                    # 通常の完了判定
+                    if stable_count >= required_stable_count and not is_still_generating:
                         self.logger.info(f"ストリーミング応答が完了しました（最終: {current_length}文字）")
                         return current_text
                 else:
@@ -511,25 +567,10 @@ class ChromeAutomationTool:
                         previous_text = current_text
                         self.logger.debug(f"テキスト更新: {current_length}文字")
                 
-                # 応答が生成中かどうかを示すインジケーターをチェック
-                loading_indicators = [
-                    "生成中", "生成しています", "thinking", "generating", "loading", "...", "▌", "●"
-                ]
-                
-                is_still_generating = any(indicator in current_text.lower() for indicator in loading_indicators)
-                
-                # DOM内の生成中インジケーターもチェック
-                try:
-                    page_html = self.driver.page_source.lower()
-                    dom_indicators = ["generating", "loading", "typing", "streaming", "thinking"]
-                    is_dom_generating = any(indicator in page_html for indicator in dom_indicators)
-                    
-                    if is_still_generating or is_dom_generating:
-                        self.logger.debug("生成中インジケーターを検出")
-                        stable_count = 0  # インジケーターがある間はカウントリセット
-                        
-                except Exception as e:
-                    self.logger.debug(f"DOM生成中チェックエラー: {e}")
+                # インジケーター検出時の処理
+                if is_still_generating:
+                    self.logger.debug("生成中インジケーターを検出")
+                    stable_count = 0  # インジケーターがある間はカウントリセット
                 
                 time.sleep(check_interval)
                 
