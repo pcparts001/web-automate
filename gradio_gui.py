@@ -20,21 +20,19 @@ class AutomationGUI:
         self.current_thread = None
         self.chrome_initialized = False
         
-    def mask_response_for_debug(self, text, max_preview=30):
-        """応答テキストをデバッグ用にマスキング"""
+    def mask_response_for_debug(self, text, max_preview=6):
+        """応答テキストをデバッグ用にマスキング（プライバシー保護強化）"""
         if not text:
             return "None"
         
         text = text.strip()
-        if len(text) <= max_preview * 2:
-            # 短いテキストは先頭のみ表示
-            preview = text[:max_preview] + "..." if len(text) > max_preview else text
-            return f"[{len(text)}文字] '{preview}'"
+        if len(text) <= max_preview:
+            # 短いテキストは全体を表示
+            return f"[{len(text)}文字] '{text}'"
         else:
-            # 長いテキストは先頭と末尾を表示
+            # 長いテキストは先頭6文字のみ表示
             start = text[:max_preview]
-            end = text[-max_preview:]
-            return f"[{len(text)}文字] '{start}...(({len(text) - max_preview * 2}文字省略))...{end}'"
+            return f"[{len(text)}文字] '{start}...(({len(text) - max_preview}文字省略))'"
         
     def start_automation(self, url, prompt_text, use_fallback, fallback_message, retry_count):
         """自動化プロセスを開始"""
@@ -179,11 +177,15 @@ class AutomationGUI:
                                     self.status_queue.put(f"🔍 [DEBUG] 応答検証: 長さ={response_length}>20, エコーでない={is_not_echo}")
                                     self.status_queue.put(f"🔍 [DEBUG] フォールバックプレフィクス: '{fallback_prefix}'")
                                     
-                                    if (response_length > 20 and is_not_echo):
+                                    # 初回フォールバック成功判定を強化（100文字以上、簡単な応答除外）
+                                    simple_responses = ["hello", "hi", "こんにちは", "ありがとう", "ok", "yes", "no"]
+                                    is_simple = any(simple.lower() in fallback_response_text.lower() for simple in simple_responses) if fallback_response_text else True
+                                    
+                                    if (response_length > 100 and is_not_echo and not is_simple):
                                         self.status_queue.put("✅ 初回フォールバック成功 - 有効な応答を確認")
                                         self.response_queue.put(fallback_response_text)
                                     else:
-                                        self.status_queue.put(f"⚠️ 初回フォールバック応答が不適切: {response_length}文字, エコーでない={is_not_echo}")
+                                        self.status_queue.put(f"⚠️ 初回フォールバック応答が不適切: {response_length}文字, エコーでない={is_not_echo}, 簡単応答={is_simple}")
                                         # 応答が不適切な場合は連続フォールバック処理に移行
                                         regenerate_button = True  # 強制的に連続処理モードに入る
                                         self.status_queue.put("🔍 [DEBUG] 強制的に連続フォールバック処理モードに移行")
@@ -274,7 +276,14 @@ class AutomationGUI:
                                                     
                                                     self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: エラーなし={not has_error}, 十分な長さ={is_long_enough}, エコーでない={is_not_echo}")
                                                     
-                                                    if (final_fallback_response and not has_error and is_long_enough and is_not_echo):
+                                                    # フォールバック再実行成功判定を強化（150文字以上、簡単応答除外）
+                                                    simple_responses = ["hello", "hi", "こんにちは", "ありがとう", "ok", "yes", "no"]
+                                                    is_simple_retry = any(simple.lower() in final_fallback_response.lower() for simple in simple_responses) if final_fallback_response else True
+                                                    is_long_enough_retry = len(final_fallback_response.strip()) > 150 if final_fallback_response else False
+                                                    
+                                                    self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 長さ十分={is_long_enough_retry}, 簡単応答でない={not is_simple_retry}")
+                                                    
+                                                    if (final_fallback_response and not has_error and is_long_enough_retry and is_not_echo and not is_simple_retry):
                                                         
                                                         self.status_queue.put(f"✅ フォールバック再実行成功: 新しい応答を検出 ({retry_attempt + 1}回目)")
                                                         self.response_queue.put(final_fallback_response)

@@ -37,21 +37,19 @@ class ChromeAutomationTool:
         self.max_regenerate_retries = 5  # 最大リトライ回数
         self.setup_logging()
     
-    def mask_text_for_debug(self, text, max_preview=30):
-        """テキストをデバッグ用にマスキング"""
+    def mask_text_for_debug(self, text, max_preview=6):
+        """テキストをデバッグ用にマスキング（プライバシー保護強化）"""
         if not text:
             return "None"
         
         text = str(text).strip()
-        if len(text) <= max_preview * 2:
-            # 短いテキストは先頭のみ表示
-            preview = text[:max_preview] + "..." if len(text) > max_preview else text
-            return f"[{len(text)}文字] '{preview}'"
+        if len(text) <= max_preview:
+            # 短いテキストは全体を表示
+            return f"[{len(text)}文字] '{text}'"
         else:
-            # 長いテキストは先頭と末尾を表示
+            # 長いテキストは先頭6文字のみ表示
             start = text[:max_preview]
-            end = text[-max_preview:]
-            return f"[{len(text)}文字] '{start}...(({len(text) - max_preview * 2}文字省略))...{end}'"
+            return f"[{len(text)}文字] '{start}...(({len(text) - max_preview}文字省略))'"
         
     def setup_logging(self):
         """ログ設定"""
@@ -1120,7 +1118,8 @@ class ChromeAutomationTool:
                 if (hasattr(self, 'current_prompt_text') and 
                     self.current_prompt_text and 
                     self.current_prompt_text[:30] in text_content):
-                    self.logger.info(f"  ✗ ID={content_id}にプロンプトテキストが含まれています")
+                    masked_prompt = self.mask_text_for_debug(self.current_prompt_text)
+                    self.logger.info(f"  ✗ ID={content_id}にプロンプトテキストが含まれています: {masked_prompt}")
                     prompt_check_passed = False
                 else:
                     self.logger.info(f"  ✓ ID={content_id}はプロンプトテキストを含みません")
