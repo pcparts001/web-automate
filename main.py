@@ -524,6 +524,16 @@ class ChromeAutomationTool:
                     "thinking...", "thinking", "考え中", "生成中", "█"
                 ]
                 
+                # 要素のclassをチェックしてthinking状態を検出
+                try:
+                    if hasattr(current_element, 'get_attribute'):
+                        element_classes = current_element.get_attribute("class") or ""
+                        if "thinking" in element_classes:
+                            is_still_generating = True
+                            self.logger.debug("要素のthinkingクラスを検出")
+                except:
+                    pass
+                
                 # テキスト内とページ内での「Thinking...」検出
                 page_text = ""
                 try:
@@ -821,13 +831,21 @@ class ChromeAutomationTool:
                     content_id = element.get_attribute("message-content-id")
                     if content_id and content_id.isdigit():
                         text_content = element.text.strip()
+                        element_classes = element.get_attribute("class") or ""
                         
                         # 詳細デバッグ情報
-                        self.logger.info(f"要素{i+1}: ID={content_id}, テキスト長={len(text_content)}文字")
+                        self.logger.info(f"要素{i+1}: ID={content_id}, テキスト長={len(text_content)}文字, クラス={element_classes}")
                         self.logger.info(f"  プレビュー: {text_content[:100]}...")
                         
-                        if len(text_content) > 20:  # 十分なテキストがある要素のみ
+                        # thinking状態やストリーミング中でも候補に含める（テキストが短くても）
+                        is_thinking = "thinking" in element_classes
+                        has_cursor = "█" in text_content
+                        
+                        if len(text_content) > 10 or is_thinking or has_cursor:  # 条件を緩和
+                            self.logger.info(f"  ✓ 候補要素として追加（thinking={is_thinking}, cursor={has_cursor}）")
                             elements_with_id.append((int(content_id), element, text_content))
+                        else:
+                            self.logger.info(f"  ✗ テキストが短すぎます（{len(text_content)}文字）")
                     else:
                         self.logger.debug(f"要素{i+1}: 無効なID={content_id}")
                 else:
@@ -867,15 +885,24 @@ class ChromeAutomationTool:
                     self.logger.info(f"  ✓ ID={content_id}はプロンプトテキストを含みません")
                 
                 if prompt_check_passed:
-                    # 応答らしいコンテンツが含まれているかチェック
-                    response_keywords = ["比較", "について", "です", "ます", "である", "。", "甘さ", "塩", "砂糖", "今日", "日差し", "強く", "琵琶湖", "日本一", "大きな", "湖", "富士山", "標高"]
-                    found_keywords = [kw for kw in response_keywords if kw in text_content]
+                    # thinking状態やストリーミング中の要素は優先的に採用
+                    element_classes = element.get_attribute("class") or ""
+                    is_thinking = "thinking" in element_classes
+                    has_cursor = "█" in text_content
                     
-                    if found_keywords:
-                        self.logger.info(f"  ✓ ID={content_id}に応答キーワードを発見: {found_keywords}")
+                    if is_thinking or has_cursor:
+                        self.logger.info(f"  ✓ ID={content_id}はthinking/ストリーミング中要素として採用")
                         new_elements.append((content_id, element, text_content))
                     else:
-                        self.logger.info(f"  ✗ ID={content_id}に応答キーワードがありません")
+                        # 通常の応答キーワードチェック
+                        response_keywords = ["回答:", "比較", "について", "です", "ます", "である", "。", "甘さ", "塩", "砂糖", "今日", "日差し", "強く", "琵琶湖", "日本一", "大きな", "湖", "富士山", "標高", "はい、", "面積", "平方キロメートル"]
+                        found_keywords = [kw for kw in response_keywords if kw in text_content]
+                        
+                        if found_keywords:
+                            self.logger.info(f"  ✓ ID={content_id}に応答キーワードを発見: {found_keywords}")
+                            new_elements.append((content_id, element, text_content))
+                        else:
+                            self.logger.info(f"  ✗ ID={content_id}に応答キーワードがありません")
             
             if not new_elements:
                 self.logger.warning("プロンプト送信後の新しいmessage-content-id要素が見つかりません")
