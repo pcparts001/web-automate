@@ -1147,9 +1147,10 @@ class ChromeAutomationTool:
                         masked_preview = self.mask_text_for_debug(text_content)
                         self.logger.info(f"  プレビュー: {masked_preview}")
                         
-                        # エラーメッセージは候補から除外
-                        if "応答の生成中にエラーが発生" in text_content or "再生成" in text_content:
-                            self.logger.info(f"  ✗ エラーメッセージのため除外: {text_content[:50]}...")
+                        # エラーメッセージやThinking中のメッセージは候補から除外
+                        if "応答の生成中にエラーが発生" in text_content or "再生成" in text_content or \
+                           "thinking" in element_classes or text_content.strip().lower().startswith("thinking") or text_content.strip() == "█":
+                            self.logger.info(f"  ✗ エラーまたはThinking中のため除外: {text_content[:50]}...")
                             continue
                         
                         elements_with_id.append((int(content_id), element, text_content))
