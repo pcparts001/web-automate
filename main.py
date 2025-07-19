@@ -416,15 +416,17 @@ class ChromeAutomationTool:
         
         self.logger.info(f"=== 再生成ボタン検索開始 (呼び出し{self._regenerate_button_call_count}回目) ===")
         
-        # Thinking中は再生成ボタンチェックをスキップ（デバッグのため一時的に無効化）
-        # try:
-        #     thinking_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Thinking')]")
-        #     visible_thinking = [elem for elem in thinking_elements if elem.is_displayed()]
-        #     if visible_thinking:
-        #         self.logger.info("Thinking中のため再生成ボタンチェックをスキップ")
-        #         return None
-        # except Exception as e:
-        #     self.logger.debug(f"Thinkingチェックエラー: {e}")
+        # Thinking中は再生成ボタンチェックをスキップ
+        try:
+            # Thinkingを示す要素をより広範囲に検索
+            thinking_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Thinking') or contains(text(), 'thinking') or contains(text(), '考え中') or contains(text(), '生成中') or contains(@class, 'thinking')]")
+            visible_thinking = [elem for elem in thinking_elements if elem.is_displayed()]
+            
+            if visible_thinking:
+                self.logger.info("Thinking中のため再生成ボタンチェックをスキップ")
+                return None
+        except Exception as e:
+            self.logger.debug(f"Thinkingチェックエラー: {e}")
         
         self.logger.info("再生成ボタン検出をデバッグモードで実行（Thinkingチェック無効）")
         
@@ -1159,9 +1161,21 @@ class ChromeAutomationTool:
                         self.logger.info(f"  プレビュー: {masked_preview}")
                         
                         # エラーメッセージやThinking中のメッセージは候補から除外
-                        if "応答の生成中にエラーが発生" in text_content or "再生成" in text_content or \
-                           "thinking" in element_classes or text_content.strip().lower().startswith("thinking") or text_content.strip() == "█":
-                            self.logger.info(f"  ✗ エラーまたはThinking中のため除外: {text_content[:50]}...")
+                        is_thinking_or_error = False
+                        if "応答の生成中にエラーが発生" in text_content or "再生成" in text_content:
+                            is_thinking_or_error = True
+                            self.logger.info(f"  ✗ エラーメッセージのため除外: {text_content[:50]}...")
+                        
+                        # Thinking関連のインジケーターをチェック
+                        genspark_loading_indicators = [
+                            "thinking...", "thinking", "考え中", "生成中", "█"
+                        ]
+                        if any(indicator.lower() in text_content.lower() for indicator in genspark_loading_indicators) or \
+                           "thinking" in element_classes.lower():
+                            is_thinking_or_error = True
+                            self.logger.info(f"  ✗ Thinking中のため除外: {text_content[:50]}...")
+
+                        if is_thinking_or_error:
                             continue
                         
                         elements_with_id.append((int(content_id), element, text_content))
