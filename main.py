@@ -445,10 +445,11 @@ class ChromeAutomationTool:
                         if method_type == 'selector' or method_type == 'partial_class' or method_type == 'partial_id':
                             elements = self.driver.find_elements(By.CSS_SELECTOR, method_value)
                             if elements:
-                                # 有効な要素の中で最もテキストが長いものを選択
+                                # DOM順序で最後の要素（最新）を優先し、それがダメなら最もテキストが長いものを選択
                                 valid_elements = [e for e in elements if e.is_displayed() and len(e.text.strip()) > 0]
                                 if valid_elements:
-                                    current_element = max(valid_elements, key=lambda e: len(e.text.strip()))
+                                    # 最後の要素（最新）を選択
+                                    current_element = valid_elements[-1]
                         elif method_type == 'id':
                             current_element = self.driver.find_element(By.ID, method_value)
                         elif method_type == 'xpath':
@@ -801,10 +802,86 @@ class ChromeAutomationTool:
             self.logger.debug(f"要素後コピーボタン検索エラー: {e}")
             return False
 
+    def get_latest_message_content(self):
+        """message-content-id属性を持つ要素から最新の応答を取得"""
+        try:
+            # message-content-id属性を持つすべての要素を取得
+            message_elements = self.driver.find_elements(By.CSS_SELECTOR, "[message-content-id]")
+            
+            if not message_elements:
+                self.logger.debug("message-content-id要素が見つかりません")
+                return None
+            
+            # IDでソートして最新を特定
+            elements_with_id = []
+            for element in message_elements:
+                if element.is_displayed():
+                    content_id = element.get_attribute("message-content-id")
+                    if content_id and content_id.isdigit():
+                        text_content = element.text.strip()
+                        if len(text_content) > 20:  # 十分なテキストがある要素のみ
+                            elements_with_id.append((int(content_id), element, text_content))
+            
+            if not elements_with_id:
+                self.logger.debug("有効なmessage-content-id要素が見つかりません")
+                return None
+            
+            # IDでソート（降順 = 最新が最初）
+            elements_with_id.sort(key=lambda x: x[0], reverse=True)
+            
+            # プロンプト送信後に新しく現れた要素のみを対象とする
+            new_elements = []
+            for content_id, element, text_content in elements_with_id:
+                # プロンプト送信後のタイムスタンプチェック（簡易版）
+                if content_id > self.existing_response_count:
+                    # さらに、送信したプロンプトテキストが含まれていないかチェック
+                    if (hasattr(self, 'current_prompt_text') and 
+                        self.current_prompt_text and 
+                        self.current_prompt_text[:30] not in text_content):
+                        
+                        # 応答らしいコンテンツが含まれているかチェック
+                        response_keywords = ["比較", "について", "です", "ます", "である", "。", "甘さ", "塩", "砂糖"]
+                        if any(keyword in text_content for keyword in response_keywords):
+                            new_elements.append((content_id, element, text_content))
+            
+            if not new_elements:
+                self.logger.debug("プロンプト送信後の新しいmessage-content-id要素が見つかりません")
+                return None
+            
+            # 最新のID（最大ID）を持つ要素を選択
+            latest_id, latest_element, latest_text = new_elements[0]
+            self.logger.info(f"最新応答を特定: message-content-id={latest_id}, テキスト長={len(latest_text)}文字")
+            self.logger.debug(f"応答プレビュー: {latest_text[:100]}...")
+            
+            # セレクター文字列を作成
+            selector = f"[message-content-id='{latest_id}']"
+            
+            # ストリーミング応答の完了を待機
+            final_text = self.wait_for_streaming_response_complete(selector)
+            
+            if final_text and "応答の生成中にエラーが発生しました" not in final_text:
+                return final_text
+            else:
+                # ストリーミング検出に失敗した場合は、現在のテキストを返す
+                self.logger.warning("ストリーミング検出失敗、現在のテキストを返します")
+                return self.clean_response_text(latest_text)
+                
+        except Exception as e:
+            self.logger.error(f"最新message-content取得エラー: {e}")
+            return None
+
     def get_response_text(self):
         """応答テキストを取得（ストリーミング対応）"""
-        # Genspark.ai用の具体的なセレクターを最初に試す
+        # 最新のmessage-content-id要素を直接検索する専用メソッドを最初に試す
+        latest_response_text = self.get_latest_message_content()
+        if latest_response_text:
+            return latest_response_text
+        
+        # 上記で取得できない場合は従来のセレクターを試す
         response_selectors = [
+            # 最も特定的なセレクター（message-content-idでソート可能）
+            ".bubble[message-content-id]",
+            "[message-content-id]",
             # Genspark.ai 固有のセレクター
             ".thinking_prompt",
             ".response_text", 
@@ -868,36 +945,52 @@ class ChromeAutomationTool:
             try:
                 elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
                 if elements:
-                    # 新しく追加された要素を特定
+                    # プロンプト送信後に新しく追加された要素があるかチェック
                     if len(elements) > existing_response_count:
-                        # 新しい要素がある場合、最後の要素（最新）を選択
+                        # DOM順序で最後の要素（最新の応答）を選択
                         response_element = elements[-1]
-                        if response_element.is_displayed() and len(response_element.text.strip()) > 0:
-                            self.logger.info(f"新しい応答要素を発見（セレクター: {selector}, 要素番号: {len(elements)}, テキスト長: {len(response_element.text.strip())}文字）")
+                        
+                        # さらに確実に最新かチェック - プロンプト送信後の応答含むかチェック
+                        element_text = response_element.text.strip()
+                        
+                        # 送信したプロンプトが含まれている要素は除外（プロンプト自体のDOM要素）
+                        if (hasattr(self, 'current_prompt_text') and 
+                            self.current_prompt_text and 
+                            self.current_prompt_text[:50] in element_text):
+                            self.logger.debug("プロンプト自体の要素をスキップ")
+                            continue
+                        
+                        # 応答らしいコンテンツが含まれているかチェック
+                        response_indicators = ["塩と砂糖", "今日の天気", "比較", "について", "です", "ます", "。"]
+                        has_response_content = any(indicator in element_text for indicator in response_indicators)
+                        
+                        if response_element.is_displayed() and len(element_text) > 50 and has_response_content:
+                            self.logger.info(f"最新の応答要素を発見（セレクター: {selector}, 順序: {len(elements)}番目, テキスト長: {len(element_text)}文字）")
+                            self.logger.debug(f"応答プレビュー: {element_text[:100]}...")
                             
                             # 新しい応答が実際に変化しているかチェック
-                            initial_text = response_element.text.strip()
+                            initial_text = element_text
                             time.sleep(3)  # 少し待ってテキストが変化するかチェック
                             
                             try:
                                 # 要素を再取得してテキストの変化を確認
                                 current_elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                                if len(current_elements) > existing_response_count:
-                                    current_element = current_elements[-1]
+                                if len(current_elements) >= len(elements):
+                                    current_element = current_elements[-1]  # 最後の要素
                                     current_text = current_element.text.strip()
                                     
                                     # テキストが変化している（ストリーミング中）または十分長い場合のみ処理
-                                    if current_text != initial_text or len(current_text) > 100:
-                                        self.logger.info(f"新しい応答の生成を確認（初期: {len(initial_text)}文字 → 現在: {len(current_text)}文字）")
+                                    if current_text != initial_text or len(current_text) > 200:
+                                        self.logger.info(f"最新応答の生成を確認（初期: {len(initial_text)}文字 → 現在: {len(current_text)}文字）")
                                         
                                         # ストリーミング応答の完了を待機（要素ではなくセレクターを渡す）
                                         final_text = self.wait_for_streaming_response_complete(selector)
                                         if final_text and "応答の生成中にエラーが発生しました" not in final_text:
                                             return final_text
                                     else:
-                                        self.logger.debug("新しい応答のテキスト変化が検出されませんでした")
+                                        self.logger.debug("最新応答のテキスト変化が検出されませんでした")
                             except Exception as e:
-                                self.logger.debug(f"応答変化チェックエラー: {e}")
+                                self.logger.debug(f"最新応答変化チェックエラー: {e}")
                                 # エラーの場合は従来通り処理
                                 final_text = self.wait_for_streaming_response_complete(selector)
                                 if final_text and "応答の生成中にエラーが発生しました" not in final_text:
