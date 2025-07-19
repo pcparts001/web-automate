@@ -211,7 +211,7 @@ class ChromeAutomationTool:
         current_url = self.driver.current_url
         self.logger.info(f"現在のURL: {current_url}")
         
-        print("\\nGenspark.aiチャットページが開きました。")
+        print("\nGenspark.aiチャットページが開きました。")
         print("ページが完全に読み込まれたらEnterキーを押してください: ")
         input()
         
@@ -697,7 +697,7 @@ class ChromeAutomationTool:
                 try:
                     element_info['xpath'] = self.driver.execute_script(
                         "function getXPath(element) {"
-                        "  if (element.id !== '') return '//*[@id=\"' + element.id + '\"]';"
+                        "  if (element.id !== '') return '//*[@id="' + element.id + '"]';"
                         "  if (element === document.body) return '/html/body';"
                         "  var ix = 0;"
                         "  var siblings = element.parentNode.childNodes;"
@@ -1397,10 +1397,10 @@ class ChromeAutomationTool:
         filepath = output_dir / filename
         
         with open(filepath, 'w', encoding='utf-8') as f:
-            f.write(f"# 自動取得結果 #{self.prompt_counter}\\n\\n")
-            f.write(f"**日時**: {datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}\\n\\n")
-            f.write(f"**プロンプト**: {prompt}\\n\\n")
-            f.write(f"---\\n\\n")
+            f.write(f"# 自動取得結果 #{self.prompt_counter}\n\n")
+            f.write(f"**日時**: {datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}\n\n")
+            f.write(f"**プロンプト**: {prompt}\n\n")
+            f.write(f"---\n\n")
             f.write(text)
             
         self.logger.info(f"ファイルを保存しました: {filepath}")
@@ -1442,7 +1442,7 @@ class ChromeAutomationTool:
                 
         if not text_input:
             self.logger.error("テキスト入力フィールドが見つかりません（リトライ後）")
-            return False
+            return False, "SEND_FAILED"
             
         # プロンプトを入力（複数行対応）
         try:
@@ -1451,7 +1451,7 @@ class ChromeAutomationTool:
             if '\n' in prompt_text:
                 self.logger.info("複数行プロンプトをJavaScriptで設定中...")
                 # JavaScriptでvalueを直接設定
-                escaped_text = prompt_text.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+                escaped_text = prompt_text.replace('\\', '\\\\').replace('"', '\"').replace('\n', '\\n')
                 self.driver.execute_script(f'arguments[0].value = "{escaped_text}";', text_input)
                 # inputイベントを発火
                 self.driver.execute_script('arguments[0].dispatchEvent(new Event("input", { bubbles: true }));', text_input)
@@ -1461,7 +1461,7 @@ class ChromeAutomationTool:
             self.logger.info(f"プロンプトを入力: {prompt_text[:50]}...")
         except Exception as e:
             self.logger.error(f"プロンプト入力エラー: {e}")
-            return False
+            return False, "SEND_FAILED"
         
         # 送信ボタンをクリック（リトライ機能付き）
         submit_success = False
@@ -1491,7 +1491,7 @@ class ChromeAutomationTool:
                 
         if not submit_success:
             self.logger.error("送信ボタンが見つかりません（リトライ後）")
-            return False
+            return False, "SEND_FAILED"
             
         # 少し待機してから応答をチェック
         time.sleep(3)
@@ -1507,7 +1507,7 @@ class ChromeAutomationTool:
         
         # 再生成エラーの場合は明示的に失敗を返す
         if response_text == "REGENERATE_ERROR_DETECTED":
-            self.logger.warning("再生成ボタンが検出されました - フォールバック処理が必要")
+            self.logger.warning("再生成ボタンが検出されました - フォールバック処理が必要です")
             return False, "REGENERATE_ERROR_DETECTED"
         
         if response_text and "応答の生成中にエラーが発生" not in response_text:
@@ -1605,7 +1605,7 @@ def main():
         tool.process_continuous_prompts()
             
     except KeyboardInterrupt:
-        print("\\n処理を中断しました")
+        print("\n処理を中断しました")
         
     finally:
         tool.close()
