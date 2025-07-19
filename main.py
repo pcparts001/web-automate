@@ -1045,6 +1045,11 @@ class ChromeAutomationTool:
                         self.logger.info(f"要素{i+1}: ID={content_id}, テキスト長={len(text_content)}文字, クラス={element_classes}")
                         self.logger.info(f"  プレビュー: {text_content[:100]}...")
                         
+                        # エラーメッセージは候補から除外
+                        if "応答の生成中にエラーが発生" in text_content or "再生成" in text_content:
+                            self.logger.info(f"  ✗ エラーメッセージのため除外: {text_content[:50]}...")
+                            continue
+                        
                         # thinking状態やストリーミング中でも候補に含める（テキストが短くても）
                         is_thinking = "thinking" in element_classes
                         has_cursor = "█" in text_content
