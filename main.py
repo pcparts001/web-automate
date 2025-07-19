@@ -241,10 +241,51 @@ class ChromeAutomationTool:
         return None
     
     def find_submit_button(self):
-        """送信ボタンを探す"""
+        """送信ボタンを探す（デバッグ強化版）"""
+        self.logger.info("=== 送信ボタン検索開始 ===")
+        
+        # --- 新しい戦略：textareaを基準に探す ---
+        try:
+            # まずテキスト入力フィールドを見つける
+            text_input = self.find_text_input()
+            if text_input:
+                self.logger.info("テキスト入力フィールドを基準に送信ボタンを検索します")
+                
+                # 親要素をいくつか遡りながら、その中にボタンがないか探す
+                parent = text_input
+                for i in range(3): # 3階層上まで見る
+                    # 兄弟要素にボタンがないか探す (SVGアイコンなどを含む)
+                    # 一般的に送信ボタンはdivやbuttonタグで、特定のクラスやSVGを持つ
+                    sibling_selectors = [
+                        "./following-sibling::button",
+                        "./following-sibling::div[contains(@class, 'send') or contains(@class, 'submit')]",
+                        "./following-sibling::div//button",
+                        "./following-sibling::*[//svg]" # SVGを持つ兄弟要素
+                    ]
+                    for selector in sibling_selectors:
+                        try:
+                            sibling_button = parent.find_element(By.XPATH, selector)
+                            if sibling_button.is_displayed() and sibling_button.is_enabled():
+                                outer_html = sibling_button.get_attribute('outerHTML')
+                                self.logger.info(f"✓ textareaの兄弟要素として送信ボタンを発見 (セレクター: {selector})")
+                                self.logger.debug(f"  [HTML]: {outer_html}")
+                                return sibling_button
+                        except NoSuchElementException:
+                            continue
+                    
+                    # 親要素に移動
+                    parent = parent.find_element(By.XPATH, "..")
+
+        except Exception as e:
+            self.logger.error(f"textarea基準のボタン検索でエラー: {e}")
+        
+        self.logger.info("--- 従来の検索方法にフォールバック ---")
+
         # 一般的なボタンセレクター
         selectors = [
             "button[type='submit']",
+            "button[aria-label*='Send']", # アクセシビリティ属性
+            "button[aria-label*='送信']",
             "input[type='submit']",
             ".submit-button",
             ".send-button"
@@ -259,8 +300,11 @@ class ChromeAutomationTool:
         for selector in selectors:
             try:
                 element = self.driver.find_element(By.CSS_SELECTOR, selector)
-                self.logger.debug(f"送信ボタンを発見: {selector}")
-                return element
+                if element.is_displayed() and element.is_enabled():
+                    outer_html = element.get_attribute('outerHTML')
+                    self.logger.info(f"✓ 送信ボタンを発見 (セレクター: {selector})")
+                    self.logger.debug(f"  [HTML]: {outer_html}")
+                    return element
             except NoSuchElementException:
                 continue
         
@@ -268,8 +312,11 @@ class ChromeAutomationTool:
         for text in text_searches:
             try:
                 element = self.driver.find_element(By.XPATH, f"//button[contains(text(), '{text}')]")
-                self.logger.debug(f"送信ボタンを発見 (テキスト): {text}")
-                return element
+                if element.is_displayed() and element.is_enabled():
+                    outer_html = element.get_attribute('outerHTML')
+                    self.logger.info(f"✓ 送信ボタンを発見 (テキスト: {text})")
+                    self.logger.debug(f"  [HTML]: {outer_html}")
+                    return element
             except NoSuchElementException:
                 continue
         
@@ -278,6 +325,9 @@ class ChromeAutomationTool:
             self.logger.info("すべてのボタンを検索して適切なものを探します...")
             buttons = self.driver.find_elements(By.TAG_NAME, "button")
             for button in buttons:
+                if not (button.is_displayed() and button.is_enabled()):
+                    continue
+
                 button_text = button.text.strip().lower()
                 button_classes = button.get_attribute("class") or ""
                 button_id = button.get_attribute("id") or ""
@@ -290,7 +340,9 @@ class ChromeAutomationTool:
                 if any(keyword in button_text for keyword in submit_keywords) or \
                    any(keyword in button_classes.lower() for keyword in submit_keywords) or \
                    any(keyword in button_id.lower() for keyword in submit_keywords):
-                    self.logger.info(f"適切な送信ボタンを発見: テキスト='{button_text}', クラス='{button_classes}'")
+                    outer_html = button.get_attribute('outerHTML')
+                    self.logger.info(f"✓ 適切な送信ボタンを発見: テキスト='{button_text}', クラス='{button_classes}'")
+                    self.logger.debug(f"  [HTML]: {outer_html}")
                     return button
                     
             # Enterキーでの送信を試すため、Noneではなく代替手段を提供
