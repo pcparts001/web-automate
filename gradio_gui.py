@@ -160,14 +160,28 @@ class AutomationGUI:
                                 except Exception as e:
                                     self.status_queue.put(f"⚠️ [DEBUG] 方法1失敗: {e}")
                             
-                            # 方法2: Enterキー（通常）
+                            # 方法2: textarea専用送信（Shift+Enter）
                             if not send_success:
                                 try:
-                                    text_input.send_keys(Keys.RETURN)
-                                    self.status_queue.put("🔍 [DEBUG] 方法2: Enterキーで送信実行")
+                                    # textareaの場合はShift+Enterを試す
+                                    if text_input.tag_name == "textarea":
+                                        text_input.send_keys(Keys.SHIFT + Keys.RETURN)
+                                        self.status_queue.put("🔍 [DEBUG] 方法2: Shift+Enterキーで送信実行")
+                                    else:
+                                        text_input.send_keys(Keys.RETURN)
+                                        self.status_queue.put("🔍 [DEBUG] 方法2: Enterキーで送信実行")
                                     send_success = True
                                 except Exception as e:
                                     self.status_queue.put(f"⚠️ [DEBUG] 方法2失敗: {e}")
+                            
+                            # 方法2.5: Ctrl+Enter
+                            if not send_success:
+                                try:
+                                    text_input.send_keys(Keys.CONTROL + Keys.RETURN)
+                                    self.status_queue.put("🔍 [DEBUG] 方法2.5: Ctrl+Enterキーで送信実行")
+                                    send_success = True
+                                except Exception as e:
+                                    self.status_queue.put(f"⚠️ [DEBUG] 方法2.5失敗: {e}")
                             
                             # 方法3: JavaScript強制送信（FormSubmit）
                             if not send_success:
@@ -322,14 +336,27 @@ class AutomationGUI:
                                                 except Exception as e:
                                                     self.status_queue.put(f"⚠️ [DEBUG] リトライ {retry_attempt + 1}: 方法1失敗: {e}")
                                             
-                                            # 方法2: Enterキー
+                                            # 方法2: textarea専用送信
                                             if not retry_send_success:
                                                 try:
-                                                    text_input.send_keys(Keys.RETURN)
-                                                    self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 方法2Enterキー成功")
+                                                    if text_input.tag_name == "textarea":
+                                                        text_input.send_keys(Keys.SHIFT + Keys.RETURN)
+                                                        self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 方法2Shift+Enter成功")
+                                                    else:
+                                                        text_input.send_keys(Keys.RETURN)
+                                                        self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 方法2Enter成功")
                                                     retry_send_success = True
                                                 except Exception as e:
                                                     self.status_queue.put(f"⚠️ [DEBUG] リトライ {retry_attempt + 1}: 方法2失敗: {e}")
+                                            
+                                            # 方法2.5: Ctrl+Enter
+                                            if not retry_send_success:
+                                                try:
+                                                    text_input.send_keys(Keys.CONTROL + Keys.RETURN)
+                                                    self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 方法2.5Ctrl+Enter成功")
+                                                    retry_send_success = True
+                                                except Exception as e:
+                                                    self.status_queue.put(f"⚠️ [DEBUG] リトライ {retry_attempt + 1}: 方法2.5失敗: {e}")
                                             
                                             # 方法3: JavaScript Enterキーイベント
                                             if not retry_send_success:

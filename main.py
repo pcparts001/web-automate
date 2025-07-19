@@ -216,15 +216,17 @@ class ChromeAutomationTool:
         input()
         
     def find_text_input(self):
-        """テキスト入力フィールドを探す"""
+        """テキスト入力フィールドを探す（実際の構造に基づく）"""
         selectors = [
+            # 実際の構造に完全対応
+            "textarea[name='query'].search-input",
+            "textarea.search-input",
+            "textarea[name='query']",
+            "textarea[placeholder='Message']",
+            # フォールバック
             "textarea",
             "input[type='text']",
-            "[contenteditable='true']",
-            "textarea[placeholder*='質問']",
-            "textarea[placeholder*='プロンプト']",
-            ".prompt-textarea",
-            "#prompt-textarea"
+            "[contenteditable='true']"
         ]
         
         for selector in selectors:
