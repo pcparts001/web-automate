@@ -364,9 +364,10 @@ class ChromeAutomationTool:
         
         previous_text = ""
         stable_count = 0
-        required_stable_count = 2  # 2回連続でテキストが変わらなければ完了と判定（短縮）
-        check_interval = 2  # 2秒間隔でチェック
+        required_stable_count = 3  # 3回連続でテキストが変わらなければ完了と判定
+        check_interval = 3  # 3秒間隔でチェック（少し長めに）
         max_checks = timeout // check_interval
+        minimum_response_length = 50  # 最低限の応答長
         
         # 要素を特定するための情報を保存
         element_info = {
@@ -554,18 +555,23 @@ class ChromeAutomationTool:
                     stable_count += 1
                     self.logger.debug(f"安定カウント: {stable_count}/{required_stable_count}")
                     
-                    # 長いテキストの場合は早期完了（1回の安定で十分）
-                    early_completion_threshold = 500  # 500文字以上
-                    if current_length >= early_completion_threshold and stable_count >= 1 and not is_still_generating:
-                        cleaned_text = self.clean_response_text(current_text)
-                        self.logger.info(f"長いテキストの早期完了判定（{len(cleaned_text)}文字、クリーンアップ済み）")
-                        return cleaned_text
-                    
-                    # 通常の完了判定
-                    if stable_count >= required_stable_count and not is_still_generating:
-                        cleaned_text = self.clean_response_text(current_text)
-                        self.logger.info(f"ストリーミング応答が完了しました（最終: {len(cleaned_text)}文字、クリーンアップ済み）")
-                        return cleaned_text
+                    # 完了判定（より厳密に）
+                    if stable_count >= required_stable_count and not is_still_generating and current_length >= minimum_response_length:
+                        # コピーボタンの存在も最終確認
+                        copy_button_exists = False
+                        try:
+                            copy_buttons = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'コピー') or contains(text(), 'Copy')]")
+                            copy_button_exists = any(btn.is_displayed() for btn in copy_buttons)
+                        except:
+                            pass
+                        
+                        if copy_button_exists or current_length >= 500:  # コピーボタンがあるか、十分長い場合
+                            cleaned_text = self.clean_response_text(current_text)
+                            self.logger.info(f"ストリーミング応答が完了しました（最終: {len(cleaned_text)}文字、コピーボタン: {copy_button_exists}）")
+                            return cleaned_text
+                        else:
+                            self.logger.debug(f"完了条件を満たしていません（長さ: {current_length}, コピーボタン: {copy_button_exists}）")
+                            stable_count = max(0, stable_count - 1)  # カウントを少し戻す
                 else:
                     # テキストが変化した場合はカウントをリセット
                     if current_length > 0:  # 空のテキストは無視
@@ -682,9 +688,37 @@ class ChromeAutomationTool:
         existing_response_count = self.existing_response_count
         self.logger.debug(f"参照する既存応答数: {existing_response_count}")
         
-        # 最初に、新しいコンテンツの出現を待機
-        self.logger.info("新しい応答コンテンツの出現を待機中...")
-        time.sleep(3)  # 応答が生成され始めるまで少し待機
+        # 新しい応答の生成開始を待機
+        self.logger.info("新しい応答の生成開始を待機中...")
+        new_response_detected = False
+        wait_start_time = time.time()
+        max_wait_time = 15  # 新しい応答検出の最大待機時間
+        
+        # 新しい応答が実際に開始されるまで待機
+        while not new_response_detected and (time.time() - wait_start_time) < max_wait_time:
+            current_response_count = self.count_existing_responses()
+            if current_response_count > existing_response_count:
+                new_response_detected = True
+                self.logger.info(f"新しい応答の開始を検出！ ({existing_response_count} → {current_response_count})")
+                break
+            
+            # 「Thinking...」インジケーターの検出も試す
+            try:
+                thinking_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Thinking') or contains(text(), 'thinking')]")
+                if any(elem.is_displayed() for elem in thinking_elements):
+                    new_response_detected = True
+                    self.logger.info("Thinking...インジケーターにより新しい応答開始を検出")
+                    break
+            except:
+                pass
+                
+            time.sleep(1)  # 1秒待機してから再チェック
+        
+        if not new_response_detected:
+            self.logger.warning("新しい応答の開始が検出できませんでした")
+        
+        # 応答が生成され始めるまで少し待機
+        time.sleep(2)
         
         # まず一般的なセレクターを試す
         for selector in response_selectors:
@@ -698,10 +732,33 @@ class ChromeAutomationTool:
                         if response_element.is_displayed() and len(response_element.text.strip()) > 0:
                             self.logger.info(f"新しい応答要素を発見（セレクター: {selector}, 要素番号: {len(elements)}, テキスト長: {len(response_element.text.strip())}文字）")
                             
-                            # ストリーミング応答の完了を待機（要素ではなくセレクターを渡す）
-                            final_text = self.wait_for_streaming_response_complete(selector)
-                            if final_text and "応答の生成中にエラーが発生しました" not in final_text:
-                                return final_text
+                            # 新しい応答が実際に変化しているかチェック
+                            initial_text = response_element.text.strip()
+                            time.sleep(3)  # 少し待ってテキストが変化するかチェック
+                            
+                            try:
+                                # 要素を再取得してテキストの変化を確認
+                                current_elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                                if len(current_elements) > existing_response_count:
+                                    current_element = current_elements[-1]
+                                    current_text = current_element.text.strip()
+                                    
+                                    # テキストが変化している（ストリーミング中）または十分長い場合のみ処理
+                                    if current_text != initial_text or len(current_text) > 100:
+                                        self.logger.info(f"新しい応答の生成を確認（初期: {len(initial_text)}文字 → 現在: {len(current_text)}文字）")
+                                        
+                                        # ストリーミング応答の完了を待機（要素ではなくセレクターを渡す）
+                                        final_text = self.wait_for_streaming_response_complete(selector)
+                                        if final_text and "応答の生成中にエラーが発生しました" not in final_text:
+                                            return final_text
+                                    else:
+                                        self.logger.debug("新しい応答のテキスト変化が検出されませんでした")
+                            except Exception as e:
+                                self.logger.debug(f"応答変化チェックエラー: {e}")
+                                # エラーの場合は従来通り処理
+                                final_text = self.wait_for_streaming_response_complete(selector)
+                                if final_text and "応答の生成中にエラーが発生しました" not in final_text:
+                                    return final_text
                     else:
                         # 既存要素の場合、最も長いテキストを持つ要素を選択（フォールバック）
                         candidate_elements = []
