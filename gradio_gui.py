@@ -160,6 +160,9 @@ class AutomationGUI:
                                         # 再度フォールバックメッセージを送信
                                         text_input = self.tool.find_text_input()
                                         if text_input:
+                                            # 送信前に現在の状態をリセット
+                                            self.tool.existing_response_count = self.tool.count_existing_responses()
+                                            self.tool.current_prompt_text = fallback_message.strip()
                                             text_input.clear()
                                             
                                             if '\n' in fallback_message.strip():
@@ -177,23 +180,29 @@ class AutomationGUI:
                                             elif submit_button:
                                                 submit_button.click()
                                             
-                                            time.sleep(3)
+                                            # ランダム待機時間（1-5秒）
+                                            import random
+                                            wait_time = random.uniform(1, 5)
+                                            self.status_queue.put(f"⏳ ランダム待機: {wait_time:.1f}秒")
+                                            time.sleep(wait_time)
                                             
                                             # 再生成ボタンが消えたかチェック
                                             regenerate_button_check = self.tool.find_regenerate_button()
                                             if not regenerate_button_check:
-                                                # 成功
+                                                # 再生成ボタンが消えた - 応答をチェック
                                                 final_fallback_response = self.tool.get_latest_message_content(wait_for_streaming=False)
                                                 if isinstance(final_fallback_response, tuple):
                                                     final_fallback_response = final_fallback_response[1]
                                                 
-                                                if final_fallback_response:
+                                                if final_fallback_response and "応答の生成中にエラーが発生" not in final_fallback_response and len(final_fallback_response.strip()) > 20:
                                                     self.status_queue.put(f"✅ フォールバック再実行成功 ({retry_attempt + 1}回目)")
                                                     self.response_queue.put(final_fallback_response)
                                                     fallback_success = True
                                                     break
+                                                else:
+                                                    self.status_queue.put(f"⚠️ 再生成ボタンは消えたが有効な応答が取得できず ({retry_attempt + 1}回目)")
                                             else:
-                                                self.status_queue.put(f"⚠️ フォールバック再実行 {retry_attempt + 1} 回目も失敗")
+                                                self.status_queue.put(f"⚠️ フォールバック再実行 {retry_attempt + 1} 回目: まだ再生成ボタンが表示中")
                                         
                                         # ループが完了したかチェック（break で抜けた場合はこの処理は実行されない）
                                         if retry_attempt == max_fallback_retries - 1:  # 最後の試行
