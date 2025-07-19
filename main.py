@@ -95,8 +95,48 @@ class ChromeAutomationTool:
                 self.logger.info("互換性モードでChromeDriverを取得します")
                 chrome_driver_path = ChromeDriverManager().install()
             
-            self.logger.info(f"ChromeDriverのパス: {chrome_driver_path}")
+            self.logger.info(f"ChromeDriverManagerが返したパス: {chrome_driver_path}")
+            
+            # ChromeDriverの実際の実行ファイルパスを探す
+            import os
+            from pathlib import Path
+            
+            driver_path = Path(chrome_driver_path)
+            self.logger.info(f"パスの詳細: {driver_path}")
+            self.logger.info(f"ファイルが存在: {driver_path.exists()}")
+            self.logger.info(f"実行可能: {os.access(driver_path, os.X_OK)}")
+            
+            # 正しいChromeDriver実行ファイルを探す
+            if driver_path.name == "THIRD_PARTY_NOTICES.chromedriver" or not os.access(driver_path, os.X_OK):
+                # 親ディレクトリでchromedriver実行ファイルを探す
+                parent_dir = driver_path.parent
+                self.logger.info(f"親ディレクトリを検索: {parent_dir}")
                 
+                possible_names = ["chromedriver", "chromedriver.exe"]
+                actual_driver_path = None
+                
+                for name in possible_names:
+                    candidate = parent_dir / name
+                    self.logger.info(f"候補ファイルをチェック: {candidate}")
+                    if candidate.exists() and os.access(candidate, os.X_OK):
+                        actual_driver_path = candidate
+                        self.logger.info(f"実行可能なChromeDriverを発見: {actual_driver_path}")
+                        break
+                
+                if actual_driver_path:
+                    chrome_driver_path = str(actual_driver_path)
+                else:
+                    # 再帰的に検索
+                    self.logger.info("再帰的にChromeDriverを検索中...")
+                    for file_path in parent_dir.rglob("chromedriver*"):
+                        if file_path.is_file() and os.access(file_path, os.X_OK):
+                            if "THIRD_PARTY" not in file_path.name:
+                                chrome_driver_path = str(file_path)
+                                self.logger.info(f"再帰検索で発見: {chrome_driver_path}")
+                                break
+            
+            self.logger.info(f"最終的なChromeDriverパス: {chrome_driver_path}")
+            
             service = Service(chrome_driver_path)
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
             self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
