@@ -146,6 +146,18 @@ class AutomationGUI:
                                 time.sleep(2)  # 少し待機してから再生成ボタンをチェック
                                 regenerate_button = self.tool.find_regenerate_button()
                                 
+                                # 初回フォールバック成功の場合も応答内容を検証
+                                if not regenerate_button:
+                                    # 応答内容の検証（連続フォールバック処理と同じロジック）
+                                    if (len(fallback_response_text.strip()) > 20 and
+                                        fallback_message.strip()[:20] not in fallback_response_text):
+                                        self.status_queue.put("✅ 初回フォールバック成功 - 有効な応答を確認")
+                                        self.response_queue.put(fallback_response_text)
+                                    else:
+                                        self.status_queue.put(f"⚠️ 初回フォールバック応答が不適切: {len(fallback_response_text.strip())}文字")
+                                        # 応答が不適切な場合は連続フォールバック処理に移行
+                                        regenerate_button = True  # 強制的に連続処理モードに入る
+                                
                                 if regenerate_button:
                                     self.status_queue.put("⚠️ フォールバック後も再生成ボタンが表示 - 連続フォールバック実行開始")
                                     
@@ -231,9 +243,7 @@ class AutomationGUI:
                                     if not fallback_success:
                                         self.status_queue.put("📝 デフォルトフォールバックメッセージを表示")
                                         self.response_queue.put(fallback_message.strip())
-                                else:
-                                    self.status_queue.put("✅ フォールバック応答受信完了")
-                                    self.response_queue.put(fallback_response_text)
+                                # else文は削除 - 初回フォールバック成功時の処理は上記で実装済み
                             else:
                                 self.status_queue.put("⚠️ フォールバック送信も失敗 - メッセージを表示")
                                 self.response_queue.put(fallback_message.strip())
