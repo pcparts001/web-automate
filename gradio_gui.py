@@ -80,17 +80,30 @@ class AutomationGUI:
             # single promptとして処理
             success, response_text = self.tool.process_single_prompt(prompt_text)
             
-            if success:
+            if success and response_text:
                 self.status_queue.put("✅ 応答受信完了")
                 self.response_queue.put(response_text)
             else:
-                error_msg = "応答の取得に失敗しました"
+                # 失敗した場合の処理
                 if use_fallback and fallback_message.strip():
-                    error_msg = fallback_message.strip()
-                    self.status_queue.put("⚠️ フォールバックメッセージを使用")
+                    # フォールバックメッセージを自動送信
+                    self.status_queue.put("🔄 フォールバックメッセージを自動送信中...")
+                    try:
+                        fallback_success, fallback_response = self.tool.process_single_prompt(fallback_message.strip())
+                        
+                        if fallback_success and fallback_response:
+                            self.status_queue.put("✅ フォールバック応答受信完了")
+                            self.response_queue.put(fallback_response)
+                        else:
+                            self.status_queue.put("⚠️ フォールバック送信も失敗 - メッセージを表示")
+                            self.response_queue.put(fallback_message.strip())
+                    except Exception as fallback_error:
+                        self.status_queue.put(f"❌ フォールバック送信エラー: {str(fallback_error)}")
+                        self.response_queue.put(fallback_message.strip())
                 else:
+                    error_msg = "応答の取得に失敗しました"
                     self.status_queue.put("❌ 応答取得失敗")
-                self.response_queue.put(error_msg)
+                    self.response_queue.put(error_msg)
                 
         except Exception as e:
             error_msg = f"エラーが発生しました: {str(e)}"
