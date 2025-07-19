@@ -144,25 +144,44 @@ class AutomationGUI:
                                 
                             self.status_queue.put("📤 フォールバック送信中...")
                             
-                            # 送信
+                            # 送信の詳細デバッグ
                             submit_button = self.tool.find_submit_button()
+                            self.status_queue.put(f"🔍 [DEBUG] 送信ボタン検出結果: {submit_button} (型: {type(submit_button)})")
+                            
+                            # 送信実行
                             if submit_button == "ENTER_KEY":
                                 from selenium.webdriver.common.keys import Keys
                                 text_input.send_keys(Keys.RETURN)
+                                self.status_queue.put("🔍 [DEBUG] Enterキーで送信実行")
                             elif submit_button:
                                 submit_button.click()
+                                self.status_queue.put("🔍 [DEBUG] ボタンクリックで送信実行")
+                            else:
+                                # フォールバック: 強制的にEnterキーで送信を試す
+                                self.status_queue.put("⚠️ [DEBUG] 送信ボタンが見つからない - 強制Enterキー送信を試行")
+                                from selenium.webdriver.common.keys import Keys
+                                text_input.send_keys(Keys.RETURN)
                             
                             # 少し待機してから応答をチェック（短縮）
+                            self.status_queue.put("⏳ 送信後3秒待機中...")
                             time.sleep(3)
+                            
+                            # 送信後のページ要素数確認
+                            from selenium.webdriver.common.by import By
+                            post_send_elements = self.tool.driver.find_elements(By.CSS_SELECTOR, "[message-content-id]")
+                            self.status_queue.put(f"🔍 [DEBUG] 送信後のmessage-content要素数: {len(post_send_elements)}")
                             
                             # 簡潔な応答取得（ストリーミング待機をスキップ）
                             self.status_queue.put("⏳ フォールバック応答を取得中...")
                             fallback_response_text = self.tool.get_latest_message_content(wait_for_streaming=False)
+                            self.status_queue.put(f"🔍 [DEBUG] 初回応答取得結果: {bool(fallback_response_text)}")
                             
                             # 応答が取得できない場合は少し待ってもう一度試す
                             if not fallback_response_text:
+                                self.status_queue.put("⏳ 応答なし - 2秒追加待機...")
                                 time.sleep(2)
                                 fallback_response_text = self.tool.get_latest_message_content(wait_for_streaming=False)
+                                self.status_queue.put(f"🔍 [DEBUG] 2回目応答取得結果: {bool(fallback_response_text)}")
                             
                             if isinstance(fallback_response_text, tuple):
                                 # タプルの場合は2番目の要素（応答テキスト）を取得
@@ -245,7 +264,7 @@ class AutomationGUI:
                                             # 送信
                                             self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 送信ボタンを検索中...")
                                             submit_button = self.tool.find_submit_button()
-                                            self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 送信方法: {submit_button}")
+                                            self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: 送信方法: {submit_button} (型: {type(submit_button)})")
                                             
                                             if submit_button == "ENTER_KEY":
                                                 from selenium.webdriver.common.keys import Keys
@@ -255,7 +274,10 @@ class AutomationGUI:
                                                 submit_button.click()
                                                 self.status_queue.put(f"🔍 [DEBUG] リトライ {retry_attempt + 1}: ボタンクリックで送信完了")
                                             else:
-                                                self.status_queue.put(f"❌ [DEBUG] リトライ {retry_attempt + 1}: 送信ボタンが見つからない")
+                                                # フォールバック: 強制的にEnterキーで送信を試す
+                                                self.status_queue.put(f"⚠️ [DEBUG] リトライ {retry_attempt + 1}: 送信ボタンが見つからない - 強制Enterキー送信を試行")
+                                                from selenium.webdriver.common.keys import Keys
+                                                text_input.send_keys(Keys.RETURN)
                                             
                                             # ランダム待機時間（1-5秒）
                                             import random
