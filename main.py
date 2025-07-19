@@ -354,8 +354,11 @@ class ChromeAutomationTool:
         except Exception as e:
             self.logger.debug(f"retry要素デバッグエラー: {e}")
         
-        # HTMLから分析した具体的なセレクター
+        # HTMLから分析した具体的なセレクター（優先順位順）
         selectors = [
+            # 最も優先: 明確に「応答を再生成」テキストを含む要素
+            "//*[contains(text(), '応答を再生成')]",
+            "//*[contains(text(), '再生成')]", 
             # Genspark.ai固有の構造（Vue.js動的属性対応）
             ".bubble.retry .button",
             ".bubble.retry div.button", 
@@ -367,11 +370,6 @@ class ChromeAutomationTool:
             ".bubble.retry .right .button",
             ".retry .right .button",
             "[class*='retry'] [class*='right'] [class*='button']",
-            # テキストベースの検索
-            "//*[contains(text(), '応答を再生成')]",
-            "//*[contains(text(), '再生成')]", 
-            "//*[contains(text(), 'Regenerate')]",
-            "//*[contains(text(), 'regenerate')]",
             # 一般的なセレクター
             ".regenerate-button",
             "[class*='regenerate']",
@@ -405,9 +403,14 @@ class ChromeAutomationTool:
                         if is_displayed and button_text:
                             self.logger.info(f"表示中の要素発見: '{button_text}' (セレクター: {selector})")
                             
-                            # 「応答を再生成」テキストを含むかチェック
-                            if "再生成" in button_text or "regenerate" in button_text.lower():
-                                self.logger.info(f"✓ 有効な再生成ボタンを確認: '{button_text}'")
+                            # XPathでテキスト検索の場合は即座に返す
+                            if selector.startswith("//") and ("再生成" in button_text or "regenerate" in button_text.lower()):
+                                self.logger.info(f"✓ XPath検索で有効な再生成ボタンを確認: '{button_text}'")
+                                return element
+                            
+                            # CSS選択の場合はテキストを含むかチェック
+                            elif not selector.startswith("//") and ("再生成" in button_text or "regenerate" in button_text.lower()):
+                                self.logger.info(f"✓ CSS検索で有効な再生成ボタンを確認: '{button_text}'")
                                 return element
                             else:
                                 self.logger.debug(f"テキストが一致しない: '{button_text}'")
@@ -667,6 +670,12 @@ class ChromeAutomationTool:
                 current_length = len(current_text)
                 
                 self.logger.debug(f"チェック {i+1}/{max_checks}: テキスト長={current_length}文字")
+                
+                # 「応答を再生成」メッセージの検出（エラー状態）
+                if "応答を再生成" in current_text or "再生成" in current_text:
+                    self.logger.warning(f"再生成メッセージを検出 - エラー状態: '{current_text[:100]}'")
+                    # エラー状態なので None を返してリトライを促す
+                    return None
                 
                 # 生成中フラグを初期化
                 is_still_generating = False

@@ -18,6 +18,7 @@ class AutomationGUI:
         self.status_queue = queue.Queue()
         self.response_queue = queue.Queue()
         self.current_thread = None
+        self.chrome_initialized = False
         
     def start_automation(self, url, prompt_text, use_fallback, fallback_message, retry_count):
         """自動化プロセスを開始"""
@@ -42,25 +43,32 @@ class AutomationGUI:
     def _run_automation(self, url, prompt_text, use_fallback, fallback_message, retry_count):
         """バックグラウンドで自動化を実行"""
         try:
-            self.status_queue.put("Chrome起動中...")
-            
-            # ChromeAutomationToolを初期化
-            self.tool = ChromeAutomationTool(debug=True)
-            
-            # Chrome起動
-            if not self.tool.launch_chrome():
-                self.status_queue.put("❌ Chrome起動に失敗")
-                self.response_queue.put("Chrome起動に失敗しました")
-                return
+            # Chrome初期化（初回のみ）
+            if not self.chrome_initialized:
+                self.status_queue.put("Chrome起動中...")
+                
+                # ChromeAutomationToolを初期化
+                self.tool = ChromeAutomationTool(debug=True)
+                
+                # Chrome起動
+                if not self.tool.launch_chrome():
+                    self.status_queue.put("❌ Chrome起動に失敗")
+                    self.response_queue.put("Chrome起動に失敗しました")
+                    return
+                    
+                self.chrome_initialized = True
+                self.status_queue.put("Chrome初期化完了")
                 
             # URLナビゲーション（デフォルト以外の場合）
             default_url = "https://www.genspark.ai/agents?type=moa_chat"
             if url.strip() and url.strip() != default_url:
-                self.status_queue.put(f"URLに移動中: {url}")
-                self.tool.driver.get(url.strip())
-                time.sleep(3)
+                current_url = self.tool.driver.current_url
+                if current_url != url.strip():
+                    self.status_queue.put(f"URLに移動中: {url}")
+                    self.tool.driver.get(url.strip())
+                    time.sleep(3)
             
-            self.status_queue.put("ページ読み込み完了")
+            self.status_queue.put("ページ準備完了")
             
             # プロンプト処理
             self.status_queue.put("プロンプト送信中...")
@@ -96,26 +104,24 @@ class AutomationGUI:
                 
         finally:
             self.is_running = False
-            if self.tool and self.tool.driver:
-                try:
-                    self.tool.driver.quit()
-                except:
-                    pass
-            self.status_queue.put("待機中")
+            # Chromeを閉じずに維持
+            self.status_queue.put("プロンプト処理完了（Chrome維持中）")
     
     def stop_automation(self):
-        """自動化を停止"""
-        if not self.is_running:
+        """自動化を停止（Chromeも終了）"""
+        if not self.is_running and not self.chrome_initialized:
             return "待機中です", "待機中"
             
         self.is_running = False
         if self.tool and self.tool.driver:
             try:
                 self.tool.driver.quit()
+                self.chrome_initialized = False
+                self.tool = None
             except:
                 pass
                 
-        return "🛑 自動化を停止しました", "停止"
+        return "🛑 自動化を停止し、Chromeを終了しました", "停止"
     
     def get_status_update(self):
         """ステータス更新を取得"""
@@ -209,12 +215,12 @@ def create_interface():
         start_btn.click(
             fn=gui.start_automation,
             inputs=[url_input, prompt_input, use_fallback, fallback_input, retry_count],
-            outputs=[response_display, response_display, status_display]
+            outputs=[status_display, response_display, status_display]
         )
         
         stop_btn.click(
             fn=gui.stop_automation,
-            outputs=[response_display, status_display]
+            outputs=[status_display, status_display]
         )
         
         # 自動更新（1秒間隔）
