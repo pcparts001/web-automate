@@ -1161,23 +1161,9 @@ class ChromeAutomationTool:
                         self.logger.info(f"  プレビュー: {masked_preview}")
                         self.logger.debug(f"  [HTML]: {element.get_attribute('outerHTML')}")
                         
-                        # エラーメッセージやThinking中のメッセージは候補から除外
-                        is_thinking_or_error = False
+                        # エラーメッセージは候補から除外
                         if "応答の生成中にエラーが発生" in text_content or "再生成" in text_content:
-                            is_thinking_or_error = True
                             self.logger.info(f"  ✗ エラーメッセージのため除外: {text_content[:50]}...")
-                        
-                        # Thinking関連のインジケーターをチェック
-                        genspark_loading_indicators = [
-                            "thinking...", "thinking", "考え中", "生成中", "█"
-                        ]
-                        if any(indicator.lower() in text_content.lower() for indicator in genspark_loading_indicators) or \
-                           "thinking" in element_classes.lower():
-                            is_thinking_or_error = True
-                            self.logger.info(f"  ✗ Thinking中のため除外: {text_content[:50]}...")
-
-                        if is_thinking_or_error:
-                            self.logger.debug(f"  要素{i+1}: ID={content_id}はThinking/エラーのためスキップ")
                             continue
                         
                         self.logger.debug(f"  要素{i+1}: ID={content_id}をelements_with_idに追加 (Thinking/エラーなし)")
