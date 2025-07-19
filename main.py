@@ -1195,7 +1195,7 @@ class ChromeAutomationTool:
 
             for content_id, element, text_content in elements_with_id:
                 # プロンプトと完全一致する場合のみ除外する
-                is_prompt_match = text_content.strip() in prompt_texts_to_check
+                is_prompt_match = text_content.strip() == self.current_prompt_text.strip() or text_content.strip() == self.original_user_prompt.strip()
                 self.logger.debug(f"  要素ID={content_id}: プロンプトと一致={is_prompt_match}, テキスト長={len(text_content)}")
                 if is_prompt_match:
                     self.logger.info(f"  ✗ ID={content_id}は送信したプロンプトと完全一致するため除外")
