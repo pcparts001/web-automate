@@ -328,8 +328,8 @@ class ChromeAutomationTool:
         self.logger.warning("再生成ボタンが見つかりません")
         return None
     
-    def wait_for_streaming_response_complete(self, response_element, timeout=60):
-        """ストリーミング応答が完了するまで待機"""
+    def wait_for_streaming_response_complete(self, response_element_selector, timeout=60):
+        """ストリーミング応答が完了するまで待機（Stale Element対策）"""
         self.logger.info("ストリーミング応答の完了を待機中...")
         
         previous_text = ""
@@ -338,15 +338,102 @@ class ChromeAutomationTool:
         check_interval = 2  # 2秒間隔でチェック
         max_checks = timeout // check_interval
         
+        # 要素を特定するための情報を保存
+        element_info = {
+            'tag': None,
+            'class': None,
+            'id': None,
+            'xpath': None
+        }
+        
+        # 初回要素情報を取得
+        try:
+            if isinstance(response_element_selector, str):
+                # セレクター文字列が渡された場合
+                self.logger.debug(f"セレクターを使用: {response_element_selector}")
+            else:
+                # WebElement が渡された場合、情報を抽出
+                element = response_element_selector
+                element_info['tag'] = element.tag_name
+                element_info['class'] = element.get_attribute("class")
+                element_info['id'] = element.get_attribute("id")
+                
+                # XPathを生成
+                try:
+                    element_info['xpath'] = self.driver.execute_script(
+                        "function getXPath(element) {"
+                        "  if (element.id !== '') return '//*[@id=\"' + element.id + '\"]';"
+                        "  if (element === document.body) return '/html/body';"
+                        "  var ix = 0;"
+                        "  var siblings = element.parentNode.childNodes;"
+                        "  for (var i = 0; i < siblings.length; i++) {"
+                        "    var sibling = siblings[i];"
+                        "    if (sibling === element) return getXPath(element.parentNode) + '/' + element.tagName.toLowerCase() + '[' + (ix + 1) + ']';"
+                        "    if (sibling.nodeType === 1 && sibling.tagName === element.tagName) ix++;"
+                        "  }"
+                        "}"
+                        "return getXPath(arguments[0]);", element
+                    )
+                except:
+                    element_info['xpath'] = None
+                    
+                self.logger.debug(f"要素情報: タグ={element_info['tag']}, ID={element_info['id']}, クラス={element_info['class']}")
+        except Exception as e:
+            self.logger.warning(f"初回要素情報取得エラー: {e}")
+        
         for i in range(max_checks):
             try:
-                current_text = response_element.text.strip()
+                # 要素を再取得（Stale Element対策）
+                current_element = None
+                
+                # 複数の方法で要素を再取得を試す
+                methods = []
+                
+                if isinstance(response_element_selector, str):
+                    methods.append(('selector', response_element_selector))
+                else:
+                    if element_info['id']:
+                        methods.append(('id', element_info['id']))
+                    if element_info['xpath']:
+                        methods.append(('xpath', element_info['xpath']))
+                    if element_info['class']:
+                        methods.append(('class', element_info['class']))
+                
+                for method_type, method_value in methods:
+                    try:
+                        if method_type == 'selector':
+                            elements = self.driver.find_elements(By.CSS_SELECTOR, method_value)
+                            if elements:
+                                current_element = elements[-1]  # 最新の要素
+                        elif method_type == 'id':
+                            current_element = self.driver.find_element(By.ID, method_value)
+                        elif method_type == 'xpath':
+                            current_element = self.driver.find_element(By.XPATH, method_value)
+                        elif method_type == 'class':
+                            elements = self.driver.find_elements(By.CLASS_NAME, method_value)
+                            if elements:
+                                # クラス名で複数見つかった場合は、テキストが最も長い要素を選択
+                                current_element = max(elements, key=lambda e: len(e.text.strip()) if e.text else 0)
+                        
+                        if current_element and current_element.is_displayed():
+                            break
+                            
+                    except Exception as method_error:
+                        self.logger.debug(f"要素再取得エラー ({method_type}: {method_value}): {method_error}")
+                        continue
+                
+                if not current_element:
+                    self.logger.warning(f"チェック {i+1}: 要素が見つかりません")
+                    time.sleep(check_interval)
+                    continue
+                
+                current_text = current_element.text.strip()
                 current_length = len(current_text)
                 
                 self.logger.debug(f"チェック {i+1}/{max_checks}: テキスト長={current_length}文字")
                 
                 # 前回と同じテキストかチェック
-                if current_text == previous_text:
+                if current_text == previous_text and current_length > 0:
                     stable_count += 1
                     self.logger.debug(f"安定カウント: {stable_count}/{required_stable_count}")
                     
@@ -355,9 +442,10 @@ class ChromeAutomationTool:
                         return current_text
                 else:
                     # テキストが変化した場合はカウントをリセット
-                    stable_count = 0
-                    previous_text = current_text
-                    self.logger.debug(f"テキスト更新: {current_length}文字")
+                    if current_length > 0:  # 空のテキストは無視
+                        stable_count = 0
+                        previous_text = current_text
+                        self.logger.debug(f"テキスト更新: {current_length}文字")
                 
                 # 応答が生成中かどうかを示すインジケーターをチェック
                 loading_indicators = [
@@ -410,8 +498,8 @@ class ChromeAutomationTool:
                     response_element = elements[-1]
                     if response_element.is_displayed():
                         self.logger.info(f"応答要素を発見（セレクター: {selector}）")
-                        # ストリーミング応答の完了を待機
-                        final_text = self.wait_for_streaming_response_complete(response_element)
+                        # ストリーミング応答の完了を待機（要素ではなくセレクターを渡す）
+                        final_text = self.wait_for_streaming_response_complete(selector)
                         if final_text and "応答の生成中にエラーが発生しました" not in final_text:
                             return final_text
             except Exception as e:
