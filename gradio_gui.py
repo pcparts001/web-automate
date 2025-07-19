@@ -103,7 +103,18 @@ class AutomationGUI:
                         text_input = self.tool.find_text_input()
                         if text_input:
                             text_input.clear()
-                            text_input.send_keys(fallback_message.strip())
+                            
+                            # 複数行対応（通常プロンプトと同じロジック）
+                            if '\n' in fallback_message.strip():
+                                self.status_queue.put("📝 複数行フォールバックメッセージをJavaScriptで設定中...")
+                                # JavaScriptでvalueを直接設定
+                                escaped_text = fallback_message.strip().replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+                                self.tool.driver.execute_script(f'arguments[0].value = "{escaped_text}";', text_input)
+                                # inputイベントを発火
+                                self.tool.driver.execute_script('arguments[0].dispatchEvent(new Event("input", { bubbles: true }));', text_input)
+                            else:
+                                text_input.send_keys(fallback_message.strip())
+                                
                             self.status_queue.put("📤 フォールバック送信中...")
                             
                             # 送信
@@ -114,15 +125,17 @@ class AutomationGUI:
                             elif submit_button:
                                 submit_button.click()
                             
-                            # 少し待機してから応答をチェック
-                            time.sleep(5)
+                            # 少し待機してから応答をチェック（短縮）
+                            time.sleep(3)
                             
-                            # 再生成リトライ処理を実行
-                            retry_success = self.tool.handle_regenerate_with_retry()
-                            if retry_success:
-                                fallback_response_text = self.tool.get_response_text()
-                            else:
-                                fallback_response_text = None
+                            # 簡潔な応答取得（リトライは行わない）
+                            self.status_queue.put("⏳ フォールバック応答を取得中...")
+                            fallback_response_text = self.tool.get_latest_message_content()
+                            
+                            # 応答が取得できない場合は少し待ってもう一度試す
+                            if not fallback_response_text:
+                                time.sleep(2)
+                                fallback_response_text = self.tool.get_latest_message_content()
                             
                             if isinstance(fallback_response_text, tuple):
                                 # タプルの場合は2番目の要素（応答テキスト）を取得
