@@ -662,7 +662,7 @@ class ChromeAutomationTool:
         print("ツールを終了します。")
         return False
     
-    def wait_for_streaming_response_complete(self, response_element_selector, timeout=60):
+    def wait_for_streaming_response_complete(self, response_element_selector, timeout=120):
         """ストリーミング応答が完了するまで待機（Stale Element対策）"""
         self.logger.info("ストリーミング応答の完了を待機中...")
         
