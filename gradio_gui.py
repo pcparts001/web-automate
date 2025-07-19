@@ -147,11 +147,15 @@ class AutomationGUI:
                                 regenerate_button = self.tool.find_regenerate_button()
                                 
                                 if regenerate_button:
-                                    self.status_queue.put("⚠️ フォールバック後も再生成ボタンが表示 - 再度フォールバック実行")
+                                    self.status_queue.put("⚠️ フォールバック後も再生成ボタンが表示 - 連続フォールバック実行開始")
                                     
-                                    # 再度フォールバック処理を実行（最大2回まで）
-                                    for retry_attempt in range(2):
-                                        self.status_queue.put(f"🔄 フォールバック再実行中 ({retry_attempt + 1}/2)...")
+                                    # 連続フォールバック処理を実行（最大20回まで）
+                                    max_fallback_retries = getattr(self.tool, 'max_regenerate_retries', 20)
+                                    self.status_queue.put(f"📋 最大フォールバックリトライ回数: {max_fallback_retries}回")
+                                    
+                                    fallback_success = False
+                                    for retry_attempt in range(max_fallback_retries):
+                                        self.status_queue.put(f"🔄 フォールバック再実行中 ({retry_attempt + 1}/{max_fallback_retries})...")
                                         
                                         # 再度フォールバックメッセージを送信
                                         text_input = self.tool.find_text_input()
@@ -186,13 +190,19 @@ class AutomationGUI:
                                                 if final_fallback_response:
                                                     self.status_queue.put(f"✅ フォールバック再実行成功 ({retry_attempt + 1}回目)")
                                                     self.response_queue.put(final_fallback_response)
+                                                    fallback_success = True
                                                     break
                                             else:
                                                 self.status_queue.put(f"⚠️ フォールバック再実行 {retry_attempt + 1} 回目も失敗")
                                         
-                                        if retry_attempt == 1:  # 最後の試行
-                                            self.status_queue.put("❌ フォールバック再実行も失敗 - デフォルトメッセージを表示")
-                                            self.response_queue.put(fallback_message.strip())
+                                        # ループが完了したかチェック（break で抜けた場合はこの処理は実行されない）
+                                        if retry_attempt == max_fallback_retries - 1:  # 最後の試行
+                                            self.status_queue.put(f"❌ {max_fallback_retries}回のフォールバック再実行がすべて失敗")
+                                    
+                                    # ループ終了後の処理
+                                    if not fallback_success:
+                                        self.status_queue.put("📝 デフォルトフォールバックメッセージを表示")
+                                        self.response_queue.put(fallback_message.strip())
                                 else:
                                     self.status_queue.put("✅ フォールバック応答受信完了")
                                     self.response_queue.put(fallback_response_text)
