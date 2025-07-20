@@ -416,11 +416,24 @@ class ChromeAutomationTool:
         
         self.logger.info(f"=== 再生成ボタン検索開始 (呼び出し{self._regenerate_button_call_count}回目) ===")
         
-        # Thinking中は再生成ボタンチェックをスキップ
+        # Thinking中は再生成ボタンチェックをスキップ（但し、エラーメッセージとは区別）
         try:
-            # Thinkingを示す要素をより広範囲に検索
-            thinking_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Thinking') or contains(text(), 'thinking') or contains(text(), '考え中') or contains(text(), '生成中') or contains(@class, 'thinking')]")
-            visible_thinking = [elem for elem in thinking_elements if elem.is_displayed()]
+            # 実際のThinking状態のみをチェック（"Thinking..."、"█"など）
+            # 「応答の生成中にエラーが発生しました。」はエラーメッセージなので除外
+            thinking_patterns = [
+                "Thinking...", "thinking...", "█", "考え中...", "生成中..."
+            ]
+            
+            thinking_elements = self.driver.find_elements(By.XPATH, "//*[contains(@class, 'thinking')]")
+            visible_thinking = []
+            
+            for elem in thinking_elements:
+                if elem.is_displayed():
+                    text = elem.text.strip()
+                    # エラーメッセージではない、実際のThinking状態のみをフィルタ
+                    if any(pattern in text for pattern in thinking_patterns):
+                        if "エラーが発生" not in text and "応答を再生成" not in text:
+                            visible_thinking.append(elem)
             
             self.logger.info(f"=== Thinking状態チェック詳細 ===")
             self.logger.info(f"Thinking要素検索結果: {len(thinking_elements)}個発見")
@@ -1071,10 +1084,19 @@ class ChromeAutomationTool:
                     time.sleep(check_interval)
                     continue
                 
-                # エラーメッセージの検出
+                # エラーメッセージの検出（テキスト内）
                 if "応答を再生成" in current_text or "再生成" in current_text:
                     self.logger.warning(f"再生成メッセージを検出: {element_type}")
                     return "REGENERATE_ERROR_DETECTED"
+                
+                # 実際の再生成ボタン要素の検出（毎回チェック）
+                try:
+                    regenerate_button = self.find_regenerate_button()
+                    if regenerate_button:
+                        self.logger.warning(f"再生成ボタン要素を検出: {element_type}")
+                        return "REGENERATE_ERROR_DETECTED"
+                except Exception as e:
+                    self.logger.debug(f"再生成ボタン検出エラー: {e}")
                 
                 # コピーボタンによる完了判定
                 try:
