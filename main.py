@@ -1390,8 +1390,8 @@ class ChromeAutomationTool:
                 self.logger.info(f"待機理由: wait_for_streaming=True が指定されているため")
                 self.logger.info(f"監視対象セレクター: {selector}")
                 self.logger.info("ストリーミング応答の完了を待機中...")
-                # タイムアウトを60秒に短縮（デフォルト120秒から）
-                final_text = self.wait_for_streaming_complete_v2(selector, timeout=60)
+                # タイムアウトを300秒に設定（長時間応答対応）
+                final_text = self.wait_for_streaming_complete_v2(selector, timeout=300)
                 
                 if final_text == "REGENERATE_ERROR_DETECTED":
                     self.logger.warning(f"再生成エラーが検出されました")
@@ -1565,7 +1565,7 @@ class ChromeAutomationTool:
             self.logger.error(f"メッセージ送信処理中の予期せぬエラー: {e}")
             return False
     
-    def process_single_prompt(self, prompt_text):
+    def process_single_prompt(self, prompt_text, save_file=True):
         """単一のプロンプトを処理（メイン処理）"""
         # 新しいプロンプト処理開始時に状態変数をリセット
         self.current_retry_count = 0
@@ -1618,8 +1618,11 @@ class ChromeAutomationTool:
         self.logger.debug(f"process_single_prompt: ファイル保存条件評価前: response_text={repr(response_text)}, bool(response_text)={bool(response_text)}, エラーメッセージ有無={'応答の生成中にエラーが発生' in response_text if response_text else False}")
         if response_text and "応答の生成中にエラーが発生" not in response_text:
             self.logger.debug(f"process_single_prompt: ファイル保存条件を満たしました。response_textの長さ={len(response_text)}")
-            filepath = self.save_to_markdown(response_text, prompt_text)
-            self.logger.info("処理が正常に完了しました")
+            if save_file:
+                filepath = self.save_to_markdown(response_text, prompt_text)
+                self.logger.info("処理が正常に完了しました")
+            else:
+                self.logger.info("処理が正常に完了しました（ファイル保存はスキップ）")
             return True, response_text
         else:
             self.logger.warning(f"process_single_prompt: ファイル保存条件を満たしませんでした。response_text={self.mask_text_for_debug(response_text) if response_text else 'None'}, エラーメッセージ有無={'応答の生成中にエラーが発生' in response_text if response_text else False}")

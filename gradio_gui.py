@@ -295,7 +295,7 @@ class AutomationGUI:
         """プロンプト送信とリトライ処理"""
         try:
             # プロンプト送信 - process_single_promptは戻り値が(success, response_text)のタプル
-            success, response_text = self.tool.process_single_prompt(prompt)
+            success, response_text = self.tool.process_single_prompt(prompt, save_file=False)
             
             if not success or response_text == "REGENERATE_ERROR_DETECTED":
                 if use_fallback and fallback_message.strip():
@@ -308,7 +308,7 @@ class AutomationGUI:
                         # フォールバック前の待機
                         time.sleep(5)
                         
-                        fallback_success, fallback_response = self.tool.process_single_prompt(fallback_message)
+                        fallback_success, fallback_response = self.tool.process_single_prompt(fallback_message, save_file=False)
                         
                         if fallback_success and fallback_response != "REGENERATE_ERROR_DETECTED":
                             self.status_queue.put(f"✅ フォールバック成功 (試行{retry + 1}回目)")
@@ -402,11 +402,18 @@ class AutomationGUI:
                 self.tool.max_regenerate_retries = max(1, int(retry_count))
             
             # 初回プロンプト処理
-            success, response_text = self.tool.process_single_prompt(prompt_text)
+            success, response_text = self.tool.process_single_prompt(prompt_text, save_file=False)
             
             if (success and response_text and response_text != "REGENERATE_ERROR_DETECTED"):
                 self.status_queue.put("✅ 応答受信完了")
                 self.response_queue.put(response_text)
+                
+                # 成功した応答をMarkdownファイルに保存
+                try:
+                    filepath = self.tool.save_to_markdown(response_text, prompt_text)
+                    self.status_queue.put(f"📁 応答をMarkdownファイルに保存しました: {filepath}")
+                except Exception as save_error:
+                    self.status_queue.put(f"⚠️ ファイル保存エラー: {save_error}")
             else:
                 # エラーまたは再生成が必要な場合
                 if response_text == "REGENERATE_ERROR_DETECTED":
