@@ -792,29 +792,40 @@ class ChromeAutomationTool:
                         continue
                 
                 if not current_element:
-                    # セレクターで見つからない場合は、新しく出現したテキストコンテンツを探す
-                    self.logger.debug(f"チェック {i+1}: セレクター検索失敗、代替検索を実行中...")
-                    try:
-                        # ページ上の全div要素から長いテキストを持つものを探す
-                        all_divs = self.driver.find_elements(By.TAG_NAME, "div")
-                        text_candidates = []
-                        
-                        for div in all_divs[-100:]:  # 最新の100要素をチェック
-                            if div.is_displayed():
-                                text = div.text.strip()
-                                if len(text) > 50:  # 50文字以上のテキスト
-                                    text_candidates.append((div, len(text)))
-                        
-                        if text_candidates:
-                            # 最も長いテキストを持つ要素を選択
-                            current_element = max(text_candidates, key=lambda x: x[1])[0]
-                            self.logger.debug(f"代替検索で要素を発見: {len(current_element.text.strip())}文字")
-                        else:
-                            self.logger.warning(f"チェック {i+1}: 要素が見つかりません")
+                    # セレクターで見つからない場合は、message-content-id属性を直接検索
+                    self.logger.debug(f"チェック {i+1}: セレクター検索失敗、message-content-id属性による直接検索を実行中...")
+                    
+                    # response_element_selectorから ID を抽出
+                    target_id = None
+                    if isinstance(response_element_selector, str) and "message-content-id=" in response_element_selector:
+                        # "[message-content-id='11']" から '11' を抽出
+                        import re
+                        match = re.search(r"message-content-id='(\d+)'", response_element_selector)
+                        if match:
+                            target_id = match.group(1)
+                    
+                    if target_id:
+                        try:
+                            # 指定されたIDのmessage-content-id要素を直接検索
+                            specific_elements = self.driver.find_elements(By.CSS_SELECTOR, f"[message-content-id='{target_id}']")
+                            
+                            # 表示されている要素を選択
+                            for elem in specific_elements:
+                                if elem.is_displayed():
+                                    current_element = elem
+                                    self.logger.debug(f"message-content-id={target_id}の要素を発見: {len(elem.text.strip())}文字")
+                                    break
+                            
+                            if not current_element:
+                                self.logger.warning(f"チェック {i+1}: message-content-id={target_id}要素が表示されていません")
+                                time.sleep(check_interval)
+                                continue
+                        except Exception as specific_error:
+                            self.logger.debug(f"message-content-id検索エラー: {specific_error}")
                             time.sleep(check_interval)
                             continue
-                    except Exception as fallback_error:
-                        self.logger.debug(f"代替検索エラー: {fallback_error}")
+                    else:
+                        self.logger.warning(f"チェック {i+1}: セレクターからIDを抽出できません: {response_element_selector}")
                         time.sleep(check_interval)
                         continue
                 
