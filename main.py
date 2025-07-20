@@ -1252,19 +1252,32 @@ class ChromeAutomationTool:
                     return final_text
                 else:
                     # ストリーミングタイムアウト時の詳細チェック
-                    self.logger.warning(f"ストリーミング検出失敗またはタイムアウト")
-                    self.logger.info(f"  - final_text: {self.mask_text_for_debug(final_text) if final_text else 'None'}")
-                    self.logger.info(f"  - latest_text: {self.mask_text_for_debug(latest_text)}")
+                    self.logger.warning(f"=== ストリーミングタイムアウト詳細チェック ===")
+                    self.logger.warning(f"final_text: {self.mask_text_for_debug(final_text) if final_text else 'None'}")
+                    self.logger.warning(f"latest_text: {self.mask_text_for_debug(latest_text)}")
+                    self.logger.warning(f"latest_text(raw): '{latest_text}'")
+                    self.logger.warning(f"latest_text.lower(): '{latest_text.lower() if latest_text else 'None'}'")
                     
-                    # Thinking状態の場合はNoneを返して再生成ボタンチェックを促す
-                    if latest_text and ("thinking" in latest_text.lower() or "thinking..." in latest_text):
-                        self.logger.warning("応答がThinking状態のままタイムアウト - 再生成ボタンチェックのためNoneを返します")
-                        return None
+                    # Thinking状態の詳細チェック
+                    if latest_text:
+                        thinking_check1 = "thinking" in latest_text.lower()
+                        thinking_check2 = "thinking..." in latest_text
+                        thinking_check3 = "thinking" in latest_text
+                        self.logger.warning(f"Thinking状態チェック詳細:")
+                        self.logger.warning(f"  - 'thinking' in latest_text.lower(): {thinking_check1}")
+                        self.logger.warning(f"  - 'thinking...' in latest_text: {thinking_check2}")
+                        self.logger.warning(f"  - 'thinking' in latest_text: {thinking_check3}")
+                        
+                        if thinking_check1 or thinking_check2:
+                            self.logger.warning("応答がThinking状態のままタイムアウト - 再生成ボタンチェックのためNoneを返します")
+                            return None
                     
                     # プロンプトテキストと同じ場合もNoneを返す
-                    if (latest_text.strip() == self.current_prompt_text.strip() or 
+                    if latest_text and (latest_text.strip() == self.current_prompt_text.strip() or 
                         latest_text.strip() == self.original_user_prompt.strip()):
-                        self.logger.warning("応答がプロンプトテキストと同一 - 再生成ボタンチェックのためNoneを返します")
+                        self.logger.warning(f"応答がプロンプトテキストと同一 - 再生成ボタンチェックのためNoneを返します")
+                        self.logger.warning(f"  - current_prompt_text: {self.mask_text_for_debug(self.current_prompt_text)}")
+                        self.logger.warning(f"  - original_user_prompt: {self.mask_text_for_debug(self.original_user_prompt)}")
                         return None
                     
                     masked_latest = self.mask_text_for_debug(latest_text)

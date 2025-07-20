@@ -58,7 +58,15 @@ class AutomationGUI:
     def _run_automation(self, url, prompt_text, use_fallback, fallback_message, retry_count):
         """バックグラウンドで自動化を実行"""
         try:
+            # プロンプト送信回数をカウント（Chrome初期化時にリセット）
+            if not hasattr(self, 'prompt_count'):
+                self.prompt_count = 0
+            self.prompt_count += 1
+            
             # --- パラメータのログ出力 ---
+            logging.info("=" * 60)
+            logging.info(f"🚀 ユーザからのプロンプト {self.prompt_count}回目 送信開始")
+            logging.info("=" * 60)
             logging.info("--- Gradioからのパラメータ ---")
             logging.info(f"use_fallback: {use_fallback} (type: {type(use_fallback)})")
             logging.info(f"fallback_message: '{fallback_message}'")
@@ -73,6 +81,7 @@ class AutomationGUI:
                     self.response_queue.put("Chrome起動に失敗しました")
                     return
                 self.chrome_initialized = True
+                self.prompt_count = 0  # Chrome初期化時にカウントリセット
                 self.status_queue.put("Chrome初期化完了")
                 
             # URLナビゲーション
@@ -175,6 +184,9 @@ class AutomationGUI:
                 
         finally:
             self.is_running = False
+            logging.info("=" * 60)
+            logging.info(f"✅ ユーザプロンプト {getattr(self, 'prompt_count', '?')}回目 処理完了")
+            logging.info("=" * 60)
             self.status_queue.put("プロンプト処理完了（Chrome維持中）")
     
     def stop_automation(self):
