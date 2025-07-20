@@ -432,7 +432,13 @@ class ChromeAutomationTool:
             return True
         else:
             if context:
-                self.logger.debug(f"[{context}] Thinking状態未検出")
+                # ストリーミング待機時は詳細ログを出力
+                if context == "ストリーミング待機":
+                    self.logger.info(f"[{context}] ✅ Thinking状態未検出: テキスト長={len(text)}文字")
+                    self.logger.info(f"[{context}] 検索対象キーワード: {thinking_indicators}")
+                    self.logger.info(f"[{context}] テキスト内容: '{text[:100]}{'...' if len(text) > 100 else ''}'")
+                else:
+                    self.logger.debug(f"[{context}] Thinking状態未検出")
             return False
     
     def find_regenerate_button(self):
@@ -901,6 +907,9 @@ class ChromeAutomationTool:
                 initial_thinking_id = match.group(1)
                 self.logger.debug(f"初期Thinking要素ID: {initial_thinking_id}")
         
+        # 前回のテキスト内容を保存する変数
+        previous_thinking_text = ""
+        
         for i in range(max_checks):
             self.logger.debug(f"新ストリーミングチェック {i+1}/{max_checks}")
             try:
@@ -977,11 +986,30 @@ class ChromeAutomationTool:
                     
                     # Thinking状態のチェック
                     if self.is_thinking_state(current_text, "ストリーミング待機"):
+                        # テキスト変化の追跡
+                        if previous_thinking_text and current_text != previous_thinking_text:
+                            self.logger.info(f"チェック {i+1}: Thinking中テキスト変化検出")
+                            self.logger.info(f"前回: '{previous_thinking_text[:50]}{'...' if len(previous_thinking_text) > 50 else ''}'")
+                            self.logger.info(f"今回: '{current_text[:50]}{'...' if len(current_text) > 50 else ''}'")
+                        
                         self.logger.debug(f"チェック {i+1}: まだThinking状態 - {current_text[:20]}...")
+                        previous_thinking_text = current_text
                         time.sleep(check_interval)
                         continue
                     else:
                         self.logger.info(f"チェック {i+1}: ✅ Thinking状態が終了しました！ (Thinking要素ID={thinking_element['id']})")
+                        self.logger.info(f"Thinking終了判定詳細: is_thinking_state()がFalseを返しました")
+                        self.logger.info(f"現在のテキスト長: {len(current_text)}文字")
+                        self.logger.info(f"現在のテキスト内容: '{current_text[:100]}{'...' if len(current_text) > 100 else ''}'")
+                        
+                        # Thinking終了の理由を分析
+                        thinking_indicators = ['thinking', '█']
+                        found_indicators = [indicator for indicator in thinking_indicators if indicator in current_text.lower()]
+                        if found_indicators:
+                            self.logger.warning(f"⚠️ Thinkingキーワードは残存: {found_indicators} - しかしis_thinking_state()はFalse")
+                        else:
+                            self.logger.info(f"✅ Thinkingキーワードが完全に消失: 正常な終了判定")
+                        
                         self.logger.debug(f"Thinking終了時のテキスト内容: {current_text[:50]}...")
                 else:
                     self.logger.warning(f"チェック {i+1}: 監視可能な要素が見つかりません")
