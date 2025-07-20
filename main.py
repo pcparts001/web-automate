@@ -965,6 +965,156 @@ class ChromeAutomationTool:
         self.logger.warning("再生成ボタンチェックのためNoneを返します")
         return None
 
+    def wait_for_streaming_complete_v2(self, response_element_selector, timeout=60, check_interval=3):
+        """ストリーミング応答完了待機の新実装（動的要素遷移対応）"""
+        self.logger.info("新ストリーミング検出ロジックを開始...")
+        self.logger.info(f"最大 20 回のチェックを開始（タイムアウト: {timeout}秒）")
+        
+        start_time = time.time()
+        max_checks = 20
+        stable_count = 0
+        stable_threshold = 3
+        previous_text = ""
+        
+        # 初期状態の記録（プロンプト送信直後の状態）
+        initial_message_ids = set()
+        try:
+            initial_elements = self.driver.find_elements(By.CSS_SELECTOR, "[message-content-id]")
+            for elem in initial_elements:
+                if elem.is_displayed():
+                    msg_id = elem.get_attribute("message-content-id")
+                    if msg_id:
+                        initial_message_ids.add(msg_id)
+            self.logger.debug(f"初期状態のmessage-content-id: {sorted(initial_message_ids)}")
+        except Exception as e:
+            self.logger.warning(f"初期状態記録エラー: {e}")
+        
+        # 初期のThinking要素ID特定
+        initial_thinking_id = None
+        if isinstance(response_element_selector, str) and "message-content-id=" in response_element_selector:
+            import re
+            match = re.search(r"message-content-id='(\d+)'", response_element_selector)
+            if match:
+                initial_thinking_id = match.group(1)
+                self.logger.debug(f"初期Thinking要素ID: {initial_thinking_id}")
+        
+        for i in range(max_checks):
+            self.logger.debug(f"新ストリーミングチェック {i+1}/{max_checks}")
+            try:
+                # 現在のすべてのmessage-content-id要素を取得
+                current_elements = self.driver.find_elements(By.CSS_SELECTOR, "[message-content-id]")
+                valid_elements = []
+                
+                for elem in current_elements:
+                    if elem.is_displayed():
+                        msg_id = elem.get_attribute("message-content-id")
+                        text = elem.text.strip()
+                        class_attr = elem.get_attribute('class') or ""
+                        if msg_id and text:
+                            valid_elements.append({
+                                'element': elem,
+                                'id': msg_id,
+                                'text': text,
+                                'length': len(text),
+                                'classes': class_attr
+                            })
+                
+                if not valid_elements:
+                    self.logger.warning(f"チェック {i+1}: 有効な要素が見つかりません")
+                    time.sleep(check_interval)
+                    continue
+                
+                # ID順でソート（最新が最後）
+                valid_elements.sort(key=lambda x: int(x['id']))
+                
+                # 1. 初期Thinking要素の確認
+                thinking_element = None
+                if initial_thinking_id:
+                    for elem_data in valid_elements:
+                        if elem_data['id'] == initial_thinking_id:
+                            thinking_element = elem_data
+                            break
+                
+                # 2. 新しい応答要素（初期状態にない要素）を探す
+                new_response_elements = []
+                for elem_data in valid_elements:
+                    if elem_data['id'] not in initial_message_ids:
+                        # Thinking系のクラスを持たない場合は正式な応答要素
+                        if 'thinking' not in elem_data['classes'].lower():
+                            new_response_elements.append(elem_data)
+                
+                current_element = None
+                current_text = ""
+                element_type = ""
+                
+                if new_response_elements:
+                    # 新しい応答要素がある場合は最新のものを優先
+                    latest_response = new_response_elements[-1]
+                    current_element = latest_response['element']
+                    current_text = latest_response['text']
+                    element_type = f"新応答要素ID={latest_response['id']}"
+                    self.logger.debug(f"チェック {i+1}: {element_type}, 長さ={len(current_text)}文字")
+                elif thinking_element:
+                    # Thinking要素のみ存在
+                    current_element = thinking_element['element']
+                    current_text = thinking_element['text']
+                    element_type = f"Thinking要素ID={thinking_element['id']}"
+                    self.logger.debug(f"チェック {i+1}: {element_type}, 長さ={len(current_text)}文字")
+                    
+                    # Thinking状態のチェック
+                    if any(keyword in current_text.lower() for keyword in ['thinking', 'generating', '生成中', '考え中', '█']):
+                        self.logger.debug(f"チェック {i+1}: まだThinking状態 - {current_text[:20]}...")
+                        time.sleep(check_interval)
+                        continue
+                else:
+                    self.logger.warning(f"チェック {i+1}: 監視可能な要素が見つかりません")
+                    time.sleep(check_interval)
+                    continue
+                
+                # エラーメッセージの検出
+                if "応答を再生成" in current_text or "再生成" in current_text:
+                    self.logger.warning(f"再生成メッセージを検出: {element_type}")
+                    return "REGENERATE_ERROR_DETECTED"
+                
+                # コピーボタンによる完了判定
+                try:
+                    copy_button_detected = self.check_copy_button_after_current_prompt()
+                    if copy_button_detected and len(current_text) > 100:
+                        cleaned_text = self.clean_response_text(current_text)
+                        self.logger.info(f"コピーボタン検出による完了判定: {len(cleaned_text)}文字")
+                        return cleaned_text
+                except Exception as e:
+                    self.logger.debug(f"コピーボタン検出エラー: {e}")
+                
+                # テキスト安定性チェック
+                if current_text == previous_text and len(current_text) > 50:
+                    stable_count += 1
+                    self.logger.debug(f"安定カウント: {stable_count}/{stable_threshold} ({element_type})")
+                    
+                    if stable_count >= stable_threshold:
+                        cleaned_text = self.clean_response_text(current_text)
+                        self.logger.info(f"テキスト安定性による完了判定: {len(cleaned_text)}文字")
+                        return cleaned_text
+                else:
+                    if len(current_text) > 0:
+                        stable_count = 0
+                        previous_text = current_text
+                        self.logger.debug(f"テキスト更新: {len(current_text)}文字 ({element_type})")
+                
+                time.sleep(check_interval)
+                
+            except Exception as e:
+                self.logger.error(f"新ストリーミングチェック {i+1} エラー: {e}")
+                time.sleep(check_interval)
+                continue
+        
+        # タイムアウト処理
+        self.logger.warning(f"=== 新ストリーミングタイムアウト ===")
+        self.logger.warning(f"タイムアウト時間: {timeout}秒, チェック回数: {max_checks}回")
+        self.logger.warning(f"最後のテキスト: {self.mask_text_for_debug(previous_text)}")
+        self.logger.warning("再生成ボタンチェックのためNoneを返します")
+        return None
+
     def clean_response_text(self, text):
         """応答テキストから不要な部分（コピーボタン以下など）を除去"""
         if not text:
@@ -1250,7 +1400,7 @@ class ChromeAutomationTool:
                 selector = f"[message-content-id='{latest_id}']"
                 self.logger.info("ストリーミング応答の完了を待機中...")
                 # タイムアウトを60秒に短縮（デフォルト120秒から）
-                final_text = self.wait_for_streaming_response_complete(selector, timeout=60)
+                final_text = self.wait_for_streaming_complete_v2(selector, timeout=60)
                 
                 if final_text == "REGENERATE_ERROR_DETECTED":
                     self.logger.warning(f"再生成エラーが検出されました")
