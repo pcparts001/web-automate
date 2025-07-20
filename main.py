@@ -523,11 +523,13 @@ class ChromeAutomationTool:
                             # 再生成関連のテキストをチェック
                             if ("応答を再生成" in button_text or "再生成" in button_text or "regenerate" in button_text.lower()):
                                 self.logger.info(f"✓ 再生成ボタンを確認: '{button_text}' (セレクター: {selector})")
+                                self.logger.info("=== 再生成ボタン検出終了（成功）===")
                                 return element
                             
                             # div.button の場合は特別に詳細チェック
                             elif selector in ["div.button", ".button"] and tag_name == "div" and "button" in class_attr:
                                 self.logger.info(f"✓ div.button要素として再生成ボタンを確認: '{button_text}'")
+                                self.logger.info("=== 再生成ボタン検出終了（成功）===")
                                 return element
                             else:
                                 self.logger.debug(f"テキストが一致しない: '{button_text}'")
@@ -568,6 +570,7 @@ class ChromeAutomationTool:
                             # クリック可能かテスト
                             if candidate.is_displayed() and candidate.is_enabled():
                                 self.logger.info(f"✓ クリック可能な再生成要素を発見: {candidate.tag_name}")
+                                self.logger.info("=== 再生成ボタン検出終了（成功）===")
                                 return candidate
                         except:
                             continue
@@ -598,6 +601,7 @@ class ChromeAutomationTool:
                                         
                                         if "再生成" in clickable_text:
                                             self.logger.info(f"✓ retry要素内で再生成ボタンを発見: '{clickable_text}'")
+                                            self.logger.info("=== 再生成ボタン検出終了（成功）===")
                                             return clickable
                                 except Exception as e:
                                     self.logger.debug(f"clickable要素処理エラー: {e}")
@@ -605,6 +609,7 @@ class ChromeAutomationTool:
             self.logger.debug(f"retry要素検索エラー: {e}")
                 
         self.logger.warning(f"再生成ボタンが見つかりません (呼び出し{self._regenerate_button_call_count}回目)")
+        self.logger.info("=== 再生成ボタン検出終了（未検出）===")
         return None
 
     def handle_regenerate_with_retry(self, max_retries=5):
