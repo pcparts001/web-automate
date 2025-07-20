@@ -874,13 +874,13 @@ class ChromeAutomationTool:
         self.logger.warning("再生成ボタンチェックのためNoneを返します")
         return None
 
-    def wait_for_streaming_complete_v2(self, response_element_selector, timeout=60, check_interval=3):
+    def wait_for_streaming_complete_v2(self, response_element_selector, timeout=300, check_interval=3):
         """ストリーミング応答完了待機の新実装（動的要素遷移対応）"""
         self.logger.info("新ストリーミング検出ロジックを開始...")
-        self.logger.info(f"最大 20 回のチェックを開始（タイムアウト: {timeout}秒）")
         
         start_time = time.time()
-        max_checks = 20
+        max_checks = 100
+        self.logger.info(f"最大 {max_checks} 回のチェックを開始（タイムアウト: {timeout}秒）")
         stable_count = 0
         stable_threshold = 3
         previous_text = ""
