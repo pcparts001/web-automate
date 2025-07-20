@@ -1576,35 +1576,35 @@ class ChromeAutomationTool:
             # 4. あらゆる方法で送信を試みる
             send_success = False
             
-            # 方法A: 送信ボタンのクリック
-            submit_button = self.find_submit_button()
-            if submit_button and submit_button != "ENTER_KEY":
-                try:
-                    submit_button.click()
-                    self.logger.info("方法A: 送信ボタンのクリックに成功しました。")
-                    send_success = True
-                except Exception as e:
-                    self.logger.warning(f"方法A失敗: {e}")
+            # 方法A: 送信ボタンのクリック（コメントアウト）
+            # submit_button = self.find_submit_button()
+            # if submit_button and submit_button != "ENTER_KEY":
+            #     try:
+            #         submit_button.click()
+            #         self.logger.info("方法A: 送信ボタンのクリックに成功しました。")
+            #         send_success = True
+            #     except Exception as e:
+            #         self.logger.warning(f"方法A失敗: {e}")
 
-            # 方法B: JavaScriptによるフォーム送信
-            if not send_success:
-                try:
-                    form_element = text_input.find_element(By.XPATH, "./ancestor-or-self::form")
-                    self.driver.execute_script("arguments[0].submit();", form_element)
-                    self.logger.info("方法B: JavaScriptによるフォーム送信に成功しました。")
-                    send_success = True
-                except Exception as e:
-                    self.logger.warning(f"方法B失敗: {e}")
+            # 方法B: JavaScriptによるフォーム送信（コメントアウト）
+            # if not send_success:
+            #     try:
+            #         form_element = text_input.find_element(By.XPATH, "./ancestor-or-self::form")
+            #         self.driver.execute_script("arguments[0].submit();", form_element)
+            #         self.logger.info("方法B: JavaScriptによるフォーム送信に成功しました。")
+            #         send_success = True
+            #     except Exception as e:
+            #         self.logger.warning(f"方法B失敗: {e}")
 
-            # 方法C: キーボードイベントの発火
-            if not send_success:
-                try:
-                    from selenium.webdriver.common.keys import Keys
-                    text_input.send_keys(Keys.ENTER)
-                    self.logger.info("方法C: Enterキーの送信に成功しました。")
-                    send_success = True
-                except Exception as e:
-                    self.logger.warning(f"方法C失敗: {e}")
+            # 方法C: キーボードイベントの発火（メイン送信方法）
+            # send_success は常にFalseなので直接実行
+            try:
+                from selenium.webdriver.common.keys import Keys
+                text_input.send_keys(Keys.ENTER)
+                self.logger.info("Enterキーによる送信に成功しました。")
+                send_success = True
+            except Exception as e:
+                self.logger.warning(f"Enterキー送信失敗: {e}")
 
             if not send_success:
                 self.logger.error("すべての送信方法が失敗しました。")
