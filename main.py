@@ -1141,7 +1141,7 @@ class ChromeAutomationTool:
             message_elements = self.driver.find_elements(By.CSS_SELECTOR, "[message-content-id]")
             
             if not message_elements:
-                self.logger.debug("message-content-id要素が見つかりません")
+                self.logger.debug("get_latest_message_content: message-content-id要素が見つかりません。Noneを返します。 (1)")
                 return None
             
             self.logger.info(f"=== デバッグ: message-content-id要素を{len(message_elements)}個発見 ===")
@@ -1173,7 +1173,7 @@ class ChromeAutomationTool:
                     self.logger.debug(f"要素{i+1}: 非表示")
             
             if not elements_with_id:
-                self.logger.debug("有効なmessage-content-id要素が見つかりません")
+                self.logger.debug("get_latest_message_content: 有効なmessage-content-id要素が見つかりません。Noneを返します。 (2)")
                 return None
             
             # IDでソート（降順 = 最新が最初）
@@ -1205,7 +1205,7 @@ class ChromeAutomationTool:
                 new_elements.append((content_id, element, text_content))
             
             if not new_elements:
-                self.logger.warning("プロンプト送信後の新しい応答候補が見つかりません")
+                self.logger.warning("get_latest_message_content: プロンプト送信後の新しい応答候補が見つかりません。Noneを返します。 (3)")
                 return None
             
             # 最新のID（最大ID）を持つ要素を選択
@@ -1225,12 +1225,12 @@ class ChromeAutomationTool:
                 elif final_text and "応答の生成中にエラーが発生しました" not in final_text:
                     masked_final = self.mask_text_for_debug(final_text)
                     self.logger.info(f"🎯 ストリーミング完了後: {masked_final}")
-                    self.logger.debug(f"get_latest_message_content: wait_for_streaming_response_completeからの戻り値: {masked_final}")
+                    self.logger.debug(f"get_latest_message_content: wait_for_streaming_response_completeからの戻り値: {masked_final}。final_textを返します。 (5)")
                     return final_text
                 else:
                     self.logger.warning("ストリーミング検出失敗、現在のテキストを返します")
                     masked_latest = self.mask_text_for_debug(latest_text)
-                    self.logger.debug(f"get_latest_message_content: ストリーミング検出失敗のためlatest_textを返します: {masked_latest}")
+                    self.logger.debug(f"get_latest_message_content: ストリーミング検出失敗のためlatest_textを返します: {masked_latest}。clean_response_textを返します。 (6)")
                     return self.clean_response_text(latest_text)
             else:
                 # ストリーミング待機をスキップ
