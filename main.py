@@ -1057,6 +1057,16 @@ class ChromeAutomationTool:
         for i in range(max_checks):
             self.logger.debug(f"新ストリーミングチェック {i+1}/{max_checks}")
             try:
+                # 🔄 最優先: 再生成ボタンチェック
+                self.logger.debug(f"チェック {i+1}: 再生成ボタンの優先チェックを実行中...")
+                regenerate_detected = self.check_regenerate_button_lightweight()
+                if regenerate_detected:
+                    self.logger.warning(f"チェック {i+1}: 🚨 再生成ボタンを検出！即座にストリーミング監視を終了します")
+                    self.logger.info("フォールバックメッセージ送信処理に移行します")
+                    return "REGENERATE_ERROR_DETECTED"
+                else:
+                    self.logger.debug(f"チェック {i+1}: 再生成ボタンは未検出 - 通常の監視を継続")
+                
                 # 現在のすべてのmessage-content-id要素を取得
                 current_elements = self.driver.find_elements(By.CSS_SELECTOR, "[message-content-id]")
                 valid_elements = []
@@ -1121,12 +1131,6 @@ class ChromeAutomationTool:
                     # Thinking状態のチェック
                     if self.is_thinking_state(current_text, "ストリーミング待機"):
                         self.logger.debug(f"チェック {i+1}: まだThinking状態 - {current_text[:20]}...")
-                        
-                        # Thinking中でも再生成ボタンチェック（参考情報として）
-                        regenerate_detected = self.check_regenerate_button_lightweight()
-                        if regenerate_detected:
-                            self.logger.info(f"チェック {i+1}: ⚠️ Thinking中だが再生成ボタンを検出")
-                        
                         time.sleep(check_interval)
                         continue
                     else:
@@ -1134,14 +1138,6 @@ class ChromeAutomationTool:
                         self.logger.debug(f"Thinking終了時のテキスト内容: {current_text[:50]}...")
                 else:
                     self.logger.warning(f"チェック {i+1}: 監視可能な要素が見つかりません")
-                    
-                    # 再生成ボタンの存在チェック（ログ出力のみ）
-                    regenerate_detected = self.check_regenerate_button_lightweight()
-                    if regenerate_detected:
-                        self.logger.info(f"チェック {i+1}: 🔄 再生成ボタンが検出されました！")
-                    else:
-                        self.logger.debug(f"チェック {i+1}: 再生成ボタンは未検出")
-                    
                     time.sleep(check_interval)
                     continue
                 
