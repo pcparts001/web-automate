@@ -436,7 +436,7 @@ class ChromeAutomationTool:
             return False
     
     def find_regenerate_button(self):
-        """応答を再生成ボタンを探す（改善版・デバッグ強化）"""
+        """応答を再生成ボタンを探す（軽量版と同じAND条件ロジック使用）"""
         # グローバルカウンターを初期化（なければ）
         if not hasattr(self, '_regenerate_button_call_count'):
             self._regenerate_button_call_count = 0
@@ -444,187 +444,35 @@ class ChromeAutomationTool:
         
         self.logger.info(f"=== 再生成ボタン検索開始 (呼び出し{self._regenerate_button_call_count}回目) ===")
         
-        # Thinking中は再生成ボタンチェックをスキップ
         try:
-            # 全体のページテキストを取得してThinking状態をチェック
-            page_text = self.driver.find_element(By.TAG_NAME, "body").text
+            # 軽量版と同じAND条件ロジックを使用
+            # 条件1: 「応答を再生成」テキストを含むdiv要素
+            regenerate_divs = self.driver.find_elements(By.XPATH, "//div[contains(text(), '応答を再生成')]")
+            self.logger.info(f"条件1チェック: 「応答を再生成」テキストを含むdiv = {len(regenerate_divs)}個")
             
-            self.logger.info(f"=== Thinking状態チェック詳細 ===")
-            is_thinking = self.is_thinking_state(page_text, "再生成ボタン検索")
+            # 条件2: div.buttonクラス要素
+            button_divs = self.driver.find_elements(By.CSS_SELECTOR, "div.button")
+            self.logger.info(f"条件2チェック: div.buttonクラス要素 = {len(button_divs)}個")
             
-            if is_thinking:
-                self.logger.info("Thinking中のため再生成ボタンチェックをスキップします")
-                return None
-            else:
-                self.logger.info("Thinking状態ではありません - 再生成ボタンチェックを継続")
-        except Exception as e:
-            self.logger.debug(f"Thinkingチェックエラー: {e}")
-        
-        self.logger.info("再生成ボタン検出をデバッグモードで実行（Thinkingチェック無効）")
-        
-        # 全体的なページ内容を検索（デバッグ用）
-        try:
-            page_source = self.driver.page_source
-            regenerate_in_source = "再生成" in page_source
-            retry_in_source = "retry" in page_source.lower()
-            self.logger.info(f"ページソース内の再生成関連チェック: '再生成'={regenerate_in_source}, 'retry'={retry_in_source}")
-            
-            # すべてのテキスト要素を検索
-            all_text_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), '再生成')]")
-            self.logger.info(f"'再生成'を含むすべての要素: {len(all_text_elements)}個")
-            
-            for i, elem in enumerate(all_text_elements[:5]):  # 最初の5個
-                try:
-                    tag = elem.tag_name
-                    classes = elem.get_attribute("class") or ""
-                    text = elem.text.strip()[:50]
-                    displayed = elem.is_displayed()
-                    self.logger.info(f"  再生成要素{i+1}: <{tag}> class='{classes}' displayed={displayed} text='{text}'")
-                except:
-                    pass
-        except Exception as e:
-            self.logger.debug(f"広範囲検索エラー: {e}")
-        
-        # まず全体的なデバッグ情報を取得
-        try:
-            all_retry_elements = self.driver.find_elements(By.CSS_SELECTOR, "*[class*='retry']")
-            self.logger.info(f"retry関連要素を{len(all_retry_elements)}個発見")
-            
-            for i, elem in enumerate(all_retry_elements):
-                if elem.is_displayed():
-                    class_attr = elem.get_attribute("class") or ""
-                    tag_name = elem.tag_name
-                    text_content = elem.text.strip()[:100]
-                    self.logger.info(f"retry要素{i+1}: <{tag_name}> class='{class_attr}' text='{text_content}'")
-        except Exception as e:
-            self.logger.debug(f"retry要素デバッグエラー: {e}")
-        
-        # HTMLから分析した具体的なセレクター（実際の構造に基づく）
-        selectors = [
-            # 最も優先: 実際の構造に完全対応
-            "//div[@class='button' and contains(text(), '応答を再生成')]",
-            # Vue.js動的属性対応（data-v-で始まる任意の属性を持つ）
-            "//div[@class='button' and contains(., '応答を再生成')]",
-            # より柔軟な検索
-            "//div[contains(text(), '応答を再生成')]",
-            "//*[@class='button' and contains(text(), '応答を再生成')]",
-            "//*[contains(@class, 'button') and contains(text(), '応答を再生成')]",
-            "//*[contains(text(), '応答を再生成')]",
-            "//*[contains(text(), '再生成')]",
-            # CSS セレクター版
-            "div.button",
-            ".button"
-        ]
-        
-        for selector in selectors:
-            try:
-                if selector.startswith("//"):
-                    elements = self.driver.find_elements(By.XPATH, selector)
-                else:
-                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                
-                self.logger.debug(f"セレクター '{selector}': {len(elements)}個の要素を発見")
-                
-                # 表示されているボタンを探す
-                for i, element in enumerate(elements):
-                    try:
-                        is_displayed = element.is_displayed()
-                        button_text = element.text.strip()
-                        tag_name = element.tag_name
-                        class_attr = element.get_attribute("class") or ""
-                        
-                        self.logger.debug(f"  要素{i+1}: <{tag_name}> class='{class_attr}' displayed={is_displayed} text='{button_text}'")
-                        
-                        if is_displayed:
-                            self.logger.info(f"表示中の要素発見: '{button_text}' (セレクター: {selector})")
+            # AND条件: 両方の条件を満たす要素を探す
+            for regenerate_div in regenerate_divs:
+                if regenerate_div.is_displayed():
+                    for button_div in button_divs:
+                        if button_div.is_displayed() and regenerate_div == button_div:
+                            self.logger.info(f"✅ AND条件で再生成ボタン検出: 「応答を再生成」テキスト含むdiv.button要素")
+                            self.logger.info("=== 再生成ボタン検出終了（成功）===")
+                            return regenerate_div
                             
-                            # 再生成関連のテキストをチェック
-                            if ("応答を再生成" in button_text or "再生成" in button_text or "regenerate" in button_text.lower()):
-                                self.logger.info(f"✓ 再生成ボタンを確認: '{button_text}' (セレクター: {selector})")
-                                self.logger.info("=== 再生成ボタン検出終了（成功）===")
-                                return element
-                            
-                            # div.button の場合は特別に詳細チェック
-                            elif selector in ["div.button", ".button"] and tag_name == "div" and "button" in class_attr:
-                                self.logger.info(f"✓ div.button要素として再生成ボタンを確認: '{button_text}'")
-                                self.logger.info("=== 再生成ボタン検出終了（成功）===")
-                                return element
-                            else:
-                                self.logger.debug(f"テキストが一致しない: '{button_text}'")
-                    except Exception as e:
-                        self.logger.debug(f"要素処理エラー: {e}")
-                        
-            except Exception as e:
-                self.logger.debug(f"再生成ボタン検索エラー ({selector}): {e}")
-                continue
-        
-        # 最後の手段: 「応答を再生成」テキストを含むすべての要素を直接検索
-        self.logger.info("=== フォールバック検索開始 ===")
-        try:
-            # 「応答を再生成」テキストを含む要素を直接検索
-            regenerate_text_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), '応答を再生成')]")
-            self.logger.info(f"フォールバック: {len(regenerate_text_elements)}個の「応答を再生成」テキスト要素を発見")
+            # 個別条件での検出状況をログ出力
+            displayed_regenerate = [d for d in regenerate_divs if d.is_displayed()]
+            displayed_buttons = [d for d in button_divs if d.is_displayed()]
             
-            for i, elem in enumerate(regenerate_text_elements):
-                if elem.is_displayed():
-                    elem_text = elem.text.strip()
-                    self.logger.info(f"再生成テキスト要素{i+1}: '{elem_text}' (タグ: {elem.tag_name})")
-                    
-                    # この要素またはその親要素でクリック可能なものを探す
-                    clickable_candidates = [elem]
-                    
-                    # 親要素も候補に追加
-                    try:
-                        parent = elem.find_element(By.XPATH, "..")
-                        clickable_candidates.append(parent)
-                        # さらに上の親も
-                        grandparent = parent.find_element(By.XPATH, "..")
-                        clickable_candidates.append(grandparent)
-                    except:
-                        pass
-                    
-                    for candidate in clickable_candidates:
-                        try:
-                            # クリック可能かテスト
-                            if candidate.is_displayed() and candidate.is_enabled():
-                                self.logger.info(f"✓ クリック可能な再生成要素を発見: {candidate.tag_name}")
-                                self.logger.info("=== 再生成ボタン検出終了（成功）===")
-                                return candidate
-                        except:
-                            continue
+            self.logger.info(f"表示中の「応答を再生成」div: {len(displayed_regenerate)}個")
+            self.logger.info(f"表示中のdiv.button: {len(displayed_buttons)}個")
+            self.logger.info(f"AND条件を満たす要素: 0個")
             
-            # 従来のretry要素検索もフォールバックとして実行
-            retry_elements = self.driver.find_elements(By.CSS_SELECTOR, "*[class*='retry']")
-            self.logger.info(f"フォールバック: {len(retry_elements)}個のretry要素を発見")
-            
-            for i, retry_element in enumerate(retry_elements):
-                if retry_element.is_displayed():
-                    all_text = retry_element.text
-                    self.logger.info(f"retry要素{i+1}のテキスト: '{all_text}'")
-                    
-                    if "応答を再生成" in all_text or "再生成" in all_text:
-                        self.logger.info(f"✓ retry要素{i+1}に再生成テキストを発見")
-                        
-                        # retry要素内のボタンやクリック可能な要素を探す
-                        clickable_selectors = [".button", "button", "div[class*='button']", "[role='button']", "div", "span"]
-                        
-                        for cs in clickable_selectors:
-                            clickable_elements = retry_element.find_elements(By.CSS_SELECTOR, cs)
-                            for j, clickable in enumerate(clickable_elements):
-                                try:
-                                    if clickable.is_displayed():
-                                        clickable_text = clickable.text.strip()
-                                        clickable_class = clickable.get_attribute("class") or ""
-                                        self.logger.debug(f"    クリック候補{j+1}: text='{clickable_text}' class='{clickable_class}'")
-                                        
-                                        if "再生成" in clickable_text:
-                                            self.logger.info(f"✓ retry要素内で再生成ボタンを発見: '{clickable_text}'")
-                                            self.logger.info("=== 再生成ボタン検出終了（成功）===")
-                                            return clickable
-                                except Exception as e:
-                                    self.logger.debug(f"clickable要素処理エラー: {e}")
         except Exception as e:
-            self.logger.debug(f"retry要素検索エラー: {e}")
+            self.logger.warning(f"再生成ボタン検索エラー: {e}")
                 
         self.logger.warning(f"再生成ボタンが見つかりません (呼び出し{self._regenerate_button_call_count}回目)")
         self.logger.info("=== 再生成ボタン検出終了（未検出）===")
