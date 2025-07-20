@@ -618,8 +618,8 @@ def create_main_tab(gui):
     flow_stop_btn.click(fn=gui.stop_automation, outputs=[status_display, status_display])
     
     # 設定保存ボタンのイベント
-    save_settings_btn.click(
-        fn=lambda url, fallback, pa, pb, pc, ua, ub, uc: gui.save_settings(
+    def save_settings_with_visibility(url, fallback, pa, pb, pc, ua, ub, uc):
+        result = gui.save_settings(
             url=url, 
             fallback_message=fallback,
             prompt_a=pa,
@@ -628,12 +628,13 @@ def create_main_tab(gui):
             use_list_a=ua,
             use_list_b=ub,
             use_list_c=uc
-        ),
+        )
+        return result, gr.update(visible=True)
+    
+    save_settings_btn.click(
+        fn=save_settings_with_visibility,
         inputs=[url_input, fallback_input, prompt_a_input, prompt_b_input, prompt_c_input, use_list_a, use_list_b, use_list_c],
-        outputs=[save_status]
-    ).then(
-        fn=lambda: gr.update(visible=True),
-        outputs=[save_status]
+        outputs=[save_status, save_status]
     )
     
     return status_display, response_display
@@ -702,17 +703,25 @@ def create_prompt_list_tab(gui):
             result_c = gr.Textbox(label="操作結果", interactive=False)
     
     # プロンプトAのイベントハンドラー
+    def add_a_with_clear(prompt):
+        result, display = gui.add_to_list("a", prompt)
+        return result, display, ""
+    
     add_a_btn.click(
-        fn=lambda prompt: gui.add_to_list("a", prompt),
+        fn=add_a_with_clear,
         inputs=[new_prompt_a],
-        outputs=[result_a, list_a_display]
-    ).then(fn=lambda: "", outputs=[new_prompt_a])
+        outputs=[result_a, list_a_display, new_prompt_a]
+    )
+    
+    def edit_a_with_clear(idx, content):
+        result, display = gui.edit_list_item("a", idx, content)
+        return result, display, ""
     
     edit_a_btn.click(
-        fn=lambda idx, content: gui.edit_list_item("a", idx, content),
+        fn=edit_a_with_clear,
         inputs=[edit_index_a, edit_content_a],
-        outputs=[result_a, list_a_display]
-    ).then(fn=lambda: "", outputs=[edit_content_a])
+        outputs=[result_a, list_a_display, edit_content_a]
+    )
     
     remove_a_btn.click(
         fn=lambda idx: gui.remove_from_list("a", idx),
@@ -721,17 +730,25 @@ def create_prompt_list_tab(gui):
     )
     
     # プロンプトBのイベントハンドラー
+    def add_b_with_clear(prompt):
+        result, display = gui.add_to_list("b", prompt)
+        return result, display, ""
+    
     add_b_btn.click(
-        fn=lambda prompt: gui.add_to_list("b", prompt),
+        fn=add_b_with_clear,
         inputs=[new_prompt_b],
-        outputs=[result_b, list_b_display]
-    ).then(fn=lambda: "", outputs=[new_prompt_b])
+        outputs=[result_b, list_b_display, new_prompt_b]
+    )
+    
+    def edit_b_with_clear(idx, content):
+        result, display = gui.edit_list_item("b", idx, content)
+        return result, display, ""
     
     edit_b_btn.click(
-        fn=lambda idx, content: gui.edit_list_item("b", idx, content),
+        fn=edit_b_with_clear,
         inputs=[edit_index_b, edit_content_b],
-        outputs=[result_b, list_b_display]
-    ).then(fn=lambda: "", outputs=[edit_content_b])
+        outputs=[result_b, list_b_display, edit_content_b]
+    )
     
     remove_b_btn.click(
         fn=lambda idx: gui.remove_from_list("b", idx),
@@ -740,17 +757,25 @@ def create_prompt_list_tab(gui):
     )
     
     # プロンプトCのイベントハンドラー
+    def add_c_with_clear(prompt):
+        result, display = gui.add_to_list("c", prompt)
+        return result, display, ""
+    
     add_c_btn.click(
-        fn=lambda prompt: gui.add_to_list("c", prompt),
+        fn=add_c_with_clear,
         inputs=[new_prompt_c],
-        outputs=[result_c, list_c_display]
-    ).then(fn=lambda: "", outputs=[new_prompt_c])
+        outputs=[result_c, list_c_display, new_prompt_c]
+    )
+    
+    def edit_c_with_clear(idx, content):
+        result, display = gui.edit_list_item("c", idx, content)
+        return result, display, ""
     
     edit_c_btn.click(
-        fn=lambda idx, content: gui.edit_list_item("c", idx, content),
+        fn=edit_c_with_clear,
         inputs=[edit_index_c, edit_content_c],
-        outputs=[result_c, list_c_display]
-    ).then(fn=lambda: "", outputs=[edit_content_c])
+        outputs=[result_c, list_c_display, edit_content_c]
+    )
     
     remove_c_btn.click(
         fn=lambda idx: gui.remove_from_list("c", idx),
