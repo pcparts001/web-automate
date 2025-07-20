@@ -1076,6 +1076,7 @@ class ChromeAutomationTool:
                     current_element = latest_response['element']
                     current_text = latest_response['text']
                     element_type = f"新応答要素ID={latest_response['id']}"
+                    self.logger.info(f"チェック {i+1}: ✅ 新しい応答要素が出現しました！Thinking状態終了 (ID={latest_response['id']})")
                     self.logger.debug(f"チェック {i+1}: {element_type}, 長さ={len(current_text)}文字")
                 elif thinking_element:
                     # Thinking要素のみ存在
@@ -1089,6 +1090,9 @@ class ChromeAutomationTool:
                         self.logger.debug(f"チェック {i+1}: まだThinking状態 - {current_text[:20]}...")
                         time.sleep(check_interval)
                         continue
+                    else:
+                        self.logger.info(f"チェック {i+1}: ✅ Thinking状態が終了しました！ (Thinking要素ID={thinking_element['id']})")
+                        self.logger.debug(f"Thinking終了時のテキスト内容: {current_text[:50]}...")
                 else:
                     self.logger.warning(f"チェック {i+1}: 監視可能な要素が見つかりません")
                     time.sleep(check_interval)
