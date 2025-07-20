@@ -633,30 +633,29 @@ class ChromeAutomationTool:
     def check_regenerate_button_lightweight(self):
         """軽量版再生成ボタンチェック（ストリーミング監視用）"""
         try:
-            # 最も基本的なセレクターで高速チェック
-            basic_selectors = [
-                "//div[contains(text(), '応答を再生成')]",
-                "//*[contains(text(), '再生成')]",
-                "div.button"
-            ]
+            # 条件1: 「応答を再生成」テキストを含むdiv要素
+            regenerate_divs = self.driver.find_elements(By.XPATH, "//div[contains(text(), '応答を再生成')]")
+            self.logger.debug(f"条件1チェック: 「応答を再生成」テキストを含むdiv = {len(regenerate_divs)}個")
             
-            for selector in basic_selectors:
-                try:
-                    if selector.startswith("//"):
-                        elements = self.driver.find_elements(By.XPATH, selector)
-                    else:
-                        elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                    
-                    # 表示されている要素をチェック
-                    for element in elements:
-                        if element.is_displayed():
-                            button_text = element.text.strip()
-                            if ("応答を再生成" in button_text or "再生成" in button_text):
-                                return True
-                            elif selector == "div.button" and "button" in (element.get_attribute("class") or ""):
-                                return True
-                except:
-                    continue
+            # 条件2: div.buttonクラス要素
+            button_divs = self.driver.find_elements(By.CSS_SELECTOR, "div.button")
+            self.logger.debug(f"条件2チェック: div.buttonクラス要素 = {len(button_divs)}個")
+            
+            # AND条件: 両方の条件を満たす要素を探す
+            for regenerate_div in regenerate_divs:
+                if regenerate_div.is_displayed():
+                    for button_div in button_divs:
+                        if button_div.is_displayed() and regenerate_div == button_div:
+                            self.logger.info(f"✅ AND条件で再生成ボタン検出: 「応答を再生成」テキスト含むdiv.button要素")
+                            return True
+                            
+            # 個別条件での検出状況をログ出力
+            displayed_regenerate = [d for d in regenerate_divs if d.is_displayed()]
+            displayed_buttons = [d for d in button_divs if d.is_displayed()]
+            
+            self.logger.debug(f"表示中の「応答を再生成」div: {len(displayed_regenerate)}個")
+            self.logger.debug(f"表示中のdiv.button: {len(displayed_buttons)}個")
+            self.logger.debug(f"AND条件を満たす要素: 0個")
             
             return False
         except Exception as e:
