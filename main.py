@@ -421,7 +421,7 @@ class ChromeAutomationTool:
         if not text:
             return False
         
-        thinking_indicators = ['thinking', 'generating', '生成中', '考え中', '█']
+        thinking_indicators = ['thinking', '█']
         text_lower = text.lower()
         
         matched_indicators = [indicator for indicator in thinking_indicators if indicator in text_lower]
