@@ -1218,54 +1218,25 @@ class ChromeAutomationTool:
             self.logger.info(f"🎯 最新応答を特定: message-content-id={latest_id}, 応答内容={masked_response}")
             
             if wait_for_streaming:
-                # シンプルアプローチ：固定時間待機後に最新応答を取得
-                self.logger.info("ストリーミング応答完了を待機中（シンプルアプローチ）...")
-                time.sleep(15)  # 15秒固定待機でストリーミング完了を待つ
+                selector = f"[message-content-id='{latest_id}']"
+                self.logger.info("ストリーミング応答の完了を待機中...")
+                # タイムアウトを60秒に短縮（デフォルト120秒から）
+                final_text = self.wait_for_streaming_response_complete(selector, timeout=60)
                 
-                # 最新の応答要素を取得（ThinkingやPromptを除外）
-                try:
-                    message_elements = self.driver.find_elements(By.CSS_SELECTOR, "[message-content-id]")
-                    if message_elements:
-                        valid_responses = []
-                        for elem in message_elements:
-                            try:
-                                classes = elem.get_attribute("class") or ""
-                                text_content = elem.text.strip()
-                                content_id = int(elem.get_attribute("message-content-id"))
-                                
-                                # 除外条件：Thinking状態、プロンプト、短すぎるテキスト
-                                is_thinking = "thinking" in classes.lower() or "thinking" in text_content.lower()
-                                is_prompt = text_content == self.current_prompt_text.strip()
-                                is_regenerate_error = "応答を再生成" in text_content or "再生成" in text_content
-                                is_too_short = len(text_content) < 50
-                                
-                                if not (is_thinking or is_prompt or is_regenerate_error or is_too_short):
-                                    valid_responses.append((content_id, elem, text_content))
-                                    self.logger.debug(f"有効応答候補: ID={content_id}, 長さ={len(text_content)}")
-                            except:
-                                continue
-                        
-                        if valid_responses:
-                            # 最新ID（最大ID）の要素を選択
-                            valid_responses.sort(key=lambda x: x[0], reverse=True)
-                            final_id, final_elem, final_text = valid_responses[0]
-                            
-                            # 再生成エラーチェック
-                            if "応答を再生成" in final_text or "再生成" in final_text:
-                                self.logger.warning("最新応答が再生成エラーです")
-                                self.logger.debug("get_latest_message_content: 再生成エラーのためNoneを返します。 (8)")
-                                return None
-                            
-                            masked_final = self.mask_text_for_debug(final_text)
-                            self.logger.info(f"🎯 シンプル取得完了: ID={final_id}, 内容={masked_final}")
-                            self.logger.debug(f"get_latest_message_content: シンプル取得の応答を返します。 (9)")
-                            return self.clean_response_text(final_text)
-                        else:
-                            self.logger.warning("有効な応答が見つかりませんでした")
-                            return None
-                except Exception as e:
-                    self.logger.error(f"シンプル応答取得エラー: {e}")
+                if final_text == "REGENERATE_ERROR_DETECTED":
+                    self.logger.warning(f"再生成エラーが検出されました")
+                    self.logger.debug(f"get_latest_message_content: wait_for_streaming_response_completeからの戻り値: REGENERATE_ERROR_DETECTED")
                     return None
+                elif final_text and "応答の生成中にエラーが発生しました" not in final_text:
+                    masked_final = self.mask_text_for_debug(final_text)
+                    self.logger.info(f"🎯 ストリーミング完了後: {masked_final}")
+                    self.logger.debug(f"get_latest_message_content: wait_for_streaming_response_completeからの戻り値: {masked_final}。final_textを返します。 (5)")
+                    return final_text
+                else:
+                    self.logger.warning("ストリーミング検出失敗、現在のテキストを返します")
+                    masked_latest = self.mask_text_for_debug(latest_text)
+                    self.logger.debug(f"get_latest_message_content: ストリーミング検出失敗のためlatest_textを返します: {masked_latest}。clean_response_textを返します。 (6)")
+                    return self.clean_response_text(latest_text)
             else:
                 # ストリーミング待機をスキップ
                 masked_latest = self.mask_text_for_debug(latest_text)
