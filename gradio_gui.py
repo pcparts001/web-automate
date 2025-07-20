@@ -627,10 +627,6 @@ def create_main_tab(gui):
     ).then(
         fn=lambda: gr.update(visible=True),
         outputs=[save_status]
-    ).then(
-        fn=lambda: gr.update(visible=False),
-        outputs=[save_status],
-        _js="() => setTimeout(() => {}, 2000)"  # 2秒後に非表示
     )
     
     return status_display, response_display
