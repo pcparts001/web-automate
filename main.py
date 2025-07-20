@@ -407,6 +407,34 @@ class ChromeAutomationTool:
                 
         return False
     
+    def is_thinking_state(self, text, context=""):
+        """
+        Thinking状態を判定する統一メソッド
+        
+        Args:
+            text (str): 判定対象のテキスト
+            context (str): 呼び出し元の識別用（ログ出力で使用）
+            
+        Returns:
+            bool: Thinking状態の場合True
+        """
+        if not text:
+            return False
+        
+        thinking_indicators = ['thinking', 'generating', '生成中', '考え中', '█']
+        text_lower = text.lower()
+        
+        matched_indicators = [indicator for indicator in thinking_indicators if indicator in text_lower]
+        
+        if matched_indicators:
+            context_info = f"[{context}] " if context else ""
+            self.logger.info(f"{context_info}Thinking状態検出: マッチしたキーワード = {matched_indicators}")
+            return True
+        else:
+            if context:
+                self.logger.debug(f"[{context}] Thinking状態未検出")
+            return False
+    
     def find_regenerate_button(self):
         """応答を再生成ボタンを探す（改善版・デバッグ強化）"""
         # グローバルカウンターを初期化（なければ）
@@ -418,23 +446,13 @@ class ChromeAutomationTool:
         
         # Thinking中は再生成ボタンチェックをスキップ
         try:
-            # Thinkingを示す要素をより広範囲に検索
-            thinking_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Thinking') or contains(text(), 'thinking') or contains(text(), '考え中') or contains(text(), '生成中') or contains(@class, 'thinking')]")
-            visible_thinking = [elem for elem in thinking_elements if elem.is_displayed()]
+            # 全体のページテキストを取得してThinking状態をチェック
+            page_text = self.driver.find_element(By.TAG_NAME, "body").text
             
             self.logger.info(f"=== Thinking状態チェック詳細 ===")
-            self.logger.info(f"Thinking要素検索結果: {len(thinking_elements)}個発見")
-            self.logger.info(f"表示中のThinking要素: {len(visible_thinking)}個")
+            is_thinking = self.is_thinking_state(page_text, "再生成ボタン検索")
             
-            if visible_thinking:
-                for i, elem in enumerate(visible_thinking[:3]):  # 最初の3個を詳細表示
-                    try:
-                        text = elem.text.strip()
-                        classes = elem.get_attribute("class") or ""
-                        self.logger.info(f"  Thinking要素{i+1}: テキスト='{text}', クラス='{classes}'")
-                    except:
-                        pass
-                
+            if is_thinking:
                 self.logger.info("Thinking中のため再生成ボタンチェックをスキップします")
                 return None
             else:
@@ -1067,7 +1085,7 @@ class ChromeAutomationTool:
                     self.logger.debug(f"チェック {i+1}: {element_type}, 長さ={len(current_text)}文字")
                     
                     # Thinking状態のチェック
-                    if any(keyword in current_text.lower() for keyword in ['thinking', 'generating', '生成中', '考え中', '█']):
+                    if self.is_thinking_state(current_text, "ストリーミング待機"):
                         self.logger.debug(f"チェック {i+1}: まだThinking状態 - {current_text[:20]}...")
                         time.sleep(check_interval)
                         continue
@@ -1431,15 +1449,18 @@ class ChromeAutomationTool:
             self.logger.info(f"wait_for_streaming: {wait_for_streaming}")
             
             # Thinking状態の事前チェック
+            self.logger.info("=== 事前Thinking状態検出開始 ===")
             if latest_text:
-                thinking_indicators = ['thinking', 'generating', '生成中', '考え中', '█']
-                is_thinking = any(indicator in latest_text.lower() for indicator in thinking_indicators)
-                self.logger.info(f"Thinking状態チェック: {is_thinking}")
+                self.logger.info("応答テキストのThinking状態を事前チェック中...")
+                is_thinking = self.is_thinking_state(latest_text, "事前チェック")
+                self.logger.info(f"事前Thinking状態チェック結果: {is_thinking}")
                 if is_thinking:
-                    matched_indicators = [ind for ind in thinking_indicators if ind in latest_text.lower()]
-                    self.logger.info(f"  検出されたThinkingキーワード: {matched_indicators}")
+                    self.logger.info("=== 事前Thinking検出: Thinking状態確認 ===")
                 else:
-                    self.logger.info("  Thinkingキーワードは検出されませんでした")
+                    self.logger.info("=== 事前Thinking検出: 通常状態確認 ===")
+            else:
+                self.logger.info("応答テキストが空のため事前Thinkingチェックをスキップ")
+                self.logger.info("=== 事前Thinking検出: スキップ ===")
             
             if wait_for_streaming:
                 selector = f"[message-content-id='{latest_id}']"
