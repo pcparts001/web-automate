@@ -630,6 +630,39 @@ class ChromeAutomationTool:
         self.logger.info("=== 再生成ボタン検出終了（未検出）===")
         return None
 
+    def check_regenerate_button_lightweight(self):
+        """軽量版再生成ボタンチェック（ストリーミング監視用）"""
+        try:
+            # 最も基本的なセレクターで高速チェック
+            basic_selectors = [
+                "//div[contains(text(), '応答を再生成')]",
+                "//*[contains(text(), '再生成')]",
+                "div.button"
+            ]
+            
+            for selector in basic_selectors:
+                try:
+                    if selector.startswith("//"):
+                        elements = self.driver.find_elements(By.XPATH, selector)
+                    else:
+                        elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    
+                    # 表示されている要素をチェック
+                    for element in elements:
+                        if element.is_displayed():
+                            button_text = element.text.strip()
+                            if ("応答を再生成" in button_text or "再生成" in button_text):
+                                return True
+                            elif selector == "div.button" and "button" in (element.get_attribute("class") or ""):
+                                return True
+                except:
+                    continue
+            
+            return False
+        except Exception as e:
+            self.logger.debug(f"軽量版再生成ボタンチェックエラー: {e}")
+            return False
+
     def handle_regenerate_with_retry(self, max_retries=5):
         """再生成ボタンの自動リトライ処理"""
         self.logger.info("=== 再生成ボタン自動リトライ処理開始 ===")
@@ -1088,6 +1121,12 @@ class ChromeAutomationTool:
                     # Thinking状態のチェック
                     if self.is_thinking_state(current_text, "ストリーミング待機"):
                         self.logger.debug(f"チェック {i+1}: まだThinking状態 - {current_text[:20]}...")
+                        
+                        # Thinking中でも再生成ボタンチェック（参考情報として）
+                        regenerate_detected = self.check_regenerate_button_lightweight()
+                        if regenerate_detected:
+                            self.logger.info(f"チェック {i+1}: ⚠️ Thinking中だが再生成ボタンを検出")
+                        
                         time.sleep(check_interval)
                         continue
                     else:
@@ -1095,6 +1134,14 @@ class ChromeAutomationTool:
                         self.logger.debug(f"Thinking終了時のテキスト内容: {current_text[:50]}...")
                 else:
                     self.logger.warning(f"チェック {i+1}: 監視可能な要素が見つかりません")
+                    
+                    # 再生成ボタンの存在チェック（ログ出力のみ）
+                    regenerate_detected = self.check_regenerate_button_lightweight()
+                    if regenerate_detected:
+                        self.logger.info(f"チェック {i+1}: 🔄 再生成ボタンが検出されました！")
+                    else:
+                        self.logger.debug(f"チェック {i+1}: 再生成ボタンは未検出")
+                    
                     time.sleep(check_interval)
                     continue
                 
