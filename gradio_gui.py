@@ -44,7 +44,13 @@ class AutomationGUI:
             "url": "https://www.genspark.ai/agents?type=moa_chat",
             "prompt_a": "",
             "prompt_b": "",
-            "prompt_c": ""
+            "prompt_c": "",
+            "prompt_a_list": [],
+            "prompt_b_list": [],
+            "prompt_c_list": [],
+            "use_list_a": False,
+            "use_list_b": False,
+            "use_list_c": False
         }
     
     def save_settings(self, **kwargs):
@@ -61,6 +67,85 @@ class AutomationGUI:
             error_msg = f"設定保存エラー: {e}"
             print(error_msg)
             return f"❌ {error_msg}"
+    
+    # Phase2: プロンプトリスト管理機能
+    def add_to_list(self, prompt_type, new_prompt):
+        """プロンプトをリストに追加"""
+        if not new_prompt.strip():
+            return f"❌ プロンプトが空です", self.get_list_display(prompt_type)
+            
+        list_key = f"prompt_{prompt_type}_list"
+        if list_key not in self.settings:
+            self.settings[list_key] = []
+            
+        self.settings[list_key].append(new_prompt.strip())
+        self.save_settings(**{list_key: self.settings[list_key]})
+        
+        return f"✅ プロンプト{prompt_type.upper()}リストに追加しました", self.get_list_display(prompt_type)
+    
+    def remove_from_list(self, prompt_type, index):
+        """プロンプトをリストから削除"""
+        list_key = f"prompt_{prompt_type}_list"
+        if list_key not in self.settings or not self.settings[list_key]:
+            return f"❌ プロンプト{prompt_type.upper()}リストが空です", self.get_list_display(prompt_type)
+            
+        try:
+            index = int(index)
+            if 0 <= index < len(self.settings[list_key]):
+                removed = self.settings[list_key].pop(index)
+                self.save_settings(**{list_key: self.settings[list_key]})
+                return f"✅ 削除しました: {removed[:50]}...", self.get_list_display(prompt_type)
+            else:
+                return f"❌ インデックス {index} が範囲外です", self.get_list_display(prompt_type)
+        except ValueError:
+            return f"❌ 無効なインデックスです: {index}", self.get_list_display(prompt_type)
+    
+    def edit_list_item(self, prompt_type, index, new_content):
+        """リスト項目を編集"""
+        list_key = f"prompt_{prompt_type}_list"
+        if list_key not in self.settings or not self.settings[list_key]:
+            return f"❌ プロンプト{prompt_type.upper()}リストが空です", self.get_list_display(prompt_type)
+            
+        if not new_content.strip():
+            return f"❌ 新しいプロンプトが空です", self.get_list_display(prompt_type)
+            
+        try:
+            index = int(index)
+            if 0 <= index < len(self.settings[list_key]):
+                old_content = self.settings[list_key][index]
+                self.settings[list_key][index] = new_content.strip()
+                self.save_settings(**{list_key: self.settings[list_key]})
+                return f"✅ 編集しました: {old_content[:30]}... → {new_content[:30]}...", self.get_list_display(prompt_type)
+            else:
+                return f"❌ インデックス {index} が範囲外です", self.get_list_display(prompt_type)
+        except ValueError:
+            return f"❌ 無効なインデックスです: {index}", self.get_list_display(prompt_type)
+    
+    def get_list_display(self, prompt_type):
+        """リストの表示用文字列を取得"""
+        list_key = f"prompt_{prompt_type}_list"
+        if list_key not in self.settings or not self.settings[list_key]:
+            return f"プロンプト{prompt_type.upper()}リスト: (空)"
+        
+        items = []
+        for i, prompt in enumerate(self.settings[list_key]):
+            preview = prompt[:50] + "..." if len(prompt) > 50 else prompt
+            items.append(f"{i}: {preview}")
+        
+        return f"プロンプト{prompt_type.upper()}リスト ({len(self.settings[list_key])}件):\n" + "\n".join(items)
+    
+    def get_random_prompt(self, prompt_type, fallback_prompt):
+        """リストからランダムプロンプトを取得"""
+        use_list_key = f"use_list_{prompt_type}"
+        list_key = f"prompt_{prompt_type}_list"
+        
+        # リストを使用する設定かつ、リストが空でない場合
+        if (self.settings.get(use_list_key, False) and 
+            list_key in self.settings and 
+            self.settings[list_key]):
+            return random.choice(self.settings[list_key])
+        else:
+            return fallback_prompt
         
     def start_prompt_flow(self, url, prompt_a, prompt_b, prompt_c, use_fallback, fallback_message, retry_count):
         """プロンプトフロー自動化を開始"""
@@ -120,15 +205,17 @@ class AutomationGUI:
                         return
                     time.sleep(1)
                 
-                self.status_queue.put(f"📤 プロンプトA送信中: {prompt_a[:50]}...")
-                response_a = self._send_prompt_with_retry(prompt_a, use_fallback, fallback_message, retry_count)
+                # ランダム選択機能を使用
+                actual_prompt_a = self.get_random_prompt("a", prompt_a)
+                self.status_queue.put(f"📤 プロンプトA送信中: {actual_prompt_a[:50]}...")
+                response_a = self._send_prompt_with_retry(actual_prompt_a, use_fallback, fallback_message, retry_count)
                 
                 if response_a == "STOPPED":
                     return
                 elif response_a and response_a != "ERROR":
                     # ファイル保存
                     try:
-                        filepath = self.tool.save_to_markdown(response_a, prompt_a)
+                        filepath = self.tool.save_to_markdown(response_a, actual_prompt_a)
                         self.response_queue.put(f"[プロンプトA] {response_a}")
                         self.status_queue.put(f"✅ プロンプトA完了、ファイル保存: {filepath}")
                     except Exception as save_error:
@@ -150,14 +237,15 @@ class AutomationGUI:
                             return
                         time.sleep(1)
                     
-                    self.status_queue.put(f"📤 プロンプトB送信中: {prompt_b[:50]}...")
-                    response_b = self._send_prompt_with_retry(prompt_b, use_fallback, fallback_message, retry_count)
+                    actual_prompt_b = self.get_random_prompt("b", prompt_b)
+                    self.status_queue.put(f"📤 プロンプトB送信中: {actual_prompt_b[:50]}...")
+                    response_b = self._send_prompt_with_retry(actual_prompt_b, use_fallback, fallback_message, retry_count)
                     
                     if response_b == "STOPPED":
                         return
                     elif response_b and response_b != "ERROR":
                         try:
-                            filepath = self.tool.save_to_markdown(response_b, prompt_b)
+                            filepath = self.tool.save_to_markdown(response_b, actual_prompt_b)
                             self.response_queue.put(f"[プロンプトB] {response_b}")
                             self.status_queue.put(f"✅ プロンプトB完了、ファイル保存: {filepath}")
                         except Exception as save_error:
@@ -176,14 +264,15 @@ class AutomationGUI:
                             return
                         time.sleep(1)
                     
-                    self.status_queue.put(f"📤 プロンプトC送信中: {prompt_c[:50]}...")
-                    response_c = self._send_prompt_with_retry(prompt_c, use_fallback, fallback_message, retry_count)
+                    actual_prompt_c = self.get_random_prompt("c", prompt_c)
+                    self.status_queue.put(f"📤 プロンプトC送信中: {actual_prompt_c[:50]}...")
+                    response_c = self._send_prompt_with_retry(actual_prompt_c, use_fallback, fallback_message, retry_count)
                     
                     if response_c == "STOPPED":
                         return
                     elif response_c and response_c != "ERROR":
                         try:
-                            filepath = self.tool.save_to_markdown(response_c, prompt_c)
+                            filepath = self.tool.save_to_markdown(response_c, actual_prompt_c)
                             self.response_queue.put(f"[プロンプトC] {response_c}")
                             self.status_queue.put(f"✅ プロンプトC完了、ファイル保存: {filepath}")
                         except Exception as save_error:
@@ -442,78 +531,15 @@ def create_interface():
         gr.Markdown("# 🤖 Chrome自動操作ツール")
         gr.Markdown("AI chat applications向けの自動化ツール")
         
-        with gr.Row():
-            with gr.Column(scale=2):
-                url_input = gr.Textbox(label="📍 URL", value=gui.settings.get("url", "https://www.genspark.ai/agents?type=moa_chat"), placeholder="移動先URL（空白でデフォルト）")
-                prompt_input = gr.Textbox(label="💬 プロンプト", lines=4, placeholder="送信するプロンプトを入力してください...")
-                
-                with gr.Row():
-                    use_fallback = gr.Checkbox(label="フォールバックメッセージを使用", value=True)
-                    retry_count = gr.Number(label="最大リトライ回数", value=20, minimum=1, maximum=50)
-                
-                fallback_input = gr.Textbox(label="📝 フォールバックメッセージ", lines=2, placeholder="エラー時の代替メッセージ...", visible=True, value=gui.settings.get("fallback_message", ""))
-                
-                # Phase1: 複数プロンプト機能
-                gr.Markdown("### 🔄 プロンプトフロー機能")
-                prompt_a_input = gr.Textbox(label="🅰️ プロンプトA (初期プロンプト)", lines=3, placeholder="最初に送信するプロンプト...", value=gui.settings.get("prompt_a", ""))
-                prompt_b_input = gr.Textbox(label="🅱️ プロンプトB (追加情報要求)", lines=3, placeholder="追加情報の候補をリクエストするプロンプト...", value=gui.settings.get("prompt_b", ""))
-                prompt_c_input = gr.Textbox(label="🅾️ プロンプトC (候補承認)", lines=3, placeholder="提案された候補にOKするプロンプト...", value=gui.settings.get("prompt_c", ""))
-                
-                with gr.Row():
-                    prompt_flow_btn = gr.Button("🔄 プロンプトフロー開始", variant="primary")
-                    flow_stop_btn = gr.Button("⏹️ フロー停止", variant="stop")
-                
-                # 設定保存ボタン
-                save_settings_btn = gr.Button("💾 設定を保存", variant="secondary")
-                save_status = gr.Textbox(label="保存状況", value="", visible=False, interactive=False)
-                
-                use_fallback.change(fn=lambda x: gr.update(visible=x), inputs=[use_fallback], outputs=[fallback_input])
-                
-                with gr.Row():
-                    start_btn = gr.Button("🚀 プロンプト送信", variant="primary")
-                    stop_btn = gr.Button("🛑 停止", variant="stop")
+        # タブ切り替え
+        with gr.Tabs():
+            with gr.TabItem("🚀 メイン機能"):
+                status_display, response_display = create_main_tab(gui)
             
-            with gr.Column(scale=2):
-                status_display = gr.Textbox(label="📊 ツールステータス", value="待機中", interactive=False)
-                response_display = gr.Textbox(label="📄 応答内容", lines=15, placeholder="応答がここに表示されます...", interactive=False)
+            with gr.TabItem("📝 プロンプトリストの編集"):
+                create_prompt_list_tab(gui)
         
-        start_btn.click(
-            fn=gui.start_automation,
-            inputs=[url_input, prompt_input, use_fallback, fallback_input, retry_count],
-            outputs=[status_display, response_display, status_display]
-        )
-        
-        stop_btn.click(fn=gui.stop_automation, outputs=[status_display, status_display])
-        
-        # プロンプトフローボタンのイベント
-        prompt_flow_btn.click(
-            fn=gui.start_prompt_flow,
-            inputs=[url_input, prompt_a_input, prompt_b_input, prompt_c_input, use_fallback, fallback_input, retry_count],
-            outputs=[status_display, response_display, status_display]
-        )
-        
-        flow_stop_btn.click(fn=gui.stop_automation, outputs=[status_display, status_display])
-        
-        # 設定保存ボタンのイベント
-        save_settings_btn.click(
-            fn=lambda url, fallback, pa, pb, pc: gui.save_settings(
-                url=url, 
-                fallback_message=fallback,
-                prompt_a=pa,
-                prompt_b=pb,
-                prompt_c=pc
-            ),
-            inputs=[url_input, fallback_input, prompt_a_input, prompt_b_input, prompt_c_input],
-            outputs=[save_status]
-        ).then(
-            fn=lambda: gr.update(visible=True),
-            outputs=[save_status]
-        ).then(
-            fn=lambda: gr.update(visible=False),
-            outputs=[save_status],
-            _js="() => setTimeout(() => {}, 2000)"  # 2秒後に非表示
-        )
-        
+        # リアルタイム更新設定
         interface.load(
             fn=lambda: (gui.get_status_update(), gui.get_response_update()),
             outputs=[status_display, response_display],
@@ -521,6 +547,213 @@ def create_interface():
         )
     
     return interface
+
+def create_main_tab(gui):
+    """メインタブのコンポーネントを作成"""
+    with gr.Row():
+        with gr.Column(scale=2):
+            url_input = gr.Textbox(label="📍 URL", value=gui.settings.get("url", "https://www.genspark.ai/agents?type=moa_chat"), placeholder="移動先URL（空白でデフォルト）")
+            prompt_input = gr.Textbox(label="💬 プロンプト", lines=4, placeholder="送信するプロンプトを入力してください...")
+            
+            with gr.Row():
+                use_fallback = gr.Checkbox(label="フォールバックメッセージを使用", value=True)
+                retry_count = gr.Number(label="最大リトライ回数", value=20, minimum=1, maximum=50)
+            
+            fallback_input = gr.Textbox(label="📝 フォールバックメッセージ", lines=2, placeholder="エラー時の代替メッセージ...", visible=True, value=gui.settings.get("fallback_message", ""))
+            
+            # Phase1: 複数プロンプト機能
+            gr.Markdown("### 🔄 プロンプトフロー機能")
+            
+            # Phase2: ランダム選択機能
+            with gr.Row():
+                use_list_a = gr.Checkbox(label="🅰️ リストを使用", value=gui.settings.get("use_list_a", False))
+                use_list_b = gr.Checkbox(label="🅱️ リストを使用", value=gui.settings.get("use_list_b", False))
+                use_list_c = gr.Checkbox(label="🅾️ リストを使用", value=gui.settings.get("use_list_c", False))
+            
+            prompt_a_input = gr.Textbox(label="🅰️ プロンプトA (初期プロンプト)", lines=3, placeholder="最初に送信するプロンプト...", value=gui.settings.get("prompt_a", ""))
+            prompt_b_input = gr.Textbox(label="🅱️ プロンプトB (追加情報要求)", lines=3, placeholder="追加情報の候補をリクエストするプロンプト...", value=gui.settings.get("prompt_b", ""))
+            prompt_c_input = gr.Textbox(label="🅾️ プロンプトC (候補承認)", lines=3, placeholder="提案された候補にOKするプロンプト...", value=gui.settings.get("prompt_c", ""))
+            
+            with gr.Row():
+                prompt_flow_btn = gr.Button("🔄 プロンプトフロー開始", variant="primary")
+                flow_stop_btn = gr.Button("⏹️ フロー停止", variant="stop")
+            
+            # 設定保存ボタン
+            save_settings_btn = gr.Button("💾 設定を保存", variant="secondary")
+            save_status = gr.Textbox(label="保存状況", value="", visible=False, interactive=False)
+            
+            use_fallback.change(fn=lambda x: gr.update(visible=x), inputs=[use_fallback], outputs=[fallback_input])
+            
+            with gr.Row():
+                start_btn = gr.Button("🚀 プロンプト送信", variant="primary")
+                stop_btn = gr.Button("🛑 停止", variant="stop")
+        
+        with gr.Column(scale=2):
+            status_display = gr.Textbox(label="📊 ツールステータス", value="待機中", interactive=False)
+            response_display = gr.Textbox(label="📄 応答内容", lines=15, placeholder="応答がここに表示されます...", interactive=False)
+    
+    # イベントハンドラー
+    start_btn.click(
+        fn=gui.start_automation,
+        inputs=[url_input, prompt_input, use_fallback, fallback_input, retry_count],
+        outputs=[status_display, response_display, status_display]
+    )
+    
+    stop_btn.click(fn=gui.stop_automation, outputs=[status_display, status_display])
+    
+    # プロンプトフローボタンのイベント
+    prompt_flow_btn.click(
+        fn=gui.start_prompt_flow,
+        inputs=[url_input, prompt_a_input, prompt_b_input, prompt_c_input, use_fallback, fallback_input, retry_count],
+        outputs=[status_display, response_display, status_display]
+    )
+    
+    flow_stop_btn.click(fn=gui.stop_automation, outputs=[status_display, status_display])
+    
+    # 設定保存ボタンのイベント
+    save_settings_btn.click(
+        fn=lambda url, fallback, pa, pb, pc, ua, ub, uc: gui.save_settings(
+            url=url, 
+            fallback_message=fallback,
+            prompt_a=pa,
+            prompt_b=pb,
+            prompt_c=pc,
+            use_list_a=ua,
+            use_list_b=ub,
+            use_list_c=uc
+        ),
+        inputs=[url_input, fallback_input, prompt_a_input, prompt_b_input, prompt_c_input, use_list_a, use_list_b, use_list_c],
+        outputs=[save_status]
+    ).then(
+        fn=lambda: gr.update(visible=True),
+        outputs=[save_status]
+    ).then(
+        fn=lambda: gr.update(visible=False),
+        outputs=[save_status],
+        _js="() => setTimeout(() => {}, 2000)"  # 2秒後に非表示
+    )
+    
+    return status_display, response_display
+
+def create_prompt_list_tab(gui):
+    """プロンプトリスト編集タブのコンポーネントを作成"""
+    with gr.Row():
+        # プロンプトAリスト管理
+        with gr.Column():
+            gr.Markdown("### 🅰️ プロンプトAリスト管理")
+            list_a_display = gr.Textbox(label="プロンプトAリスト", lines=8, value=gui.get_list_display("a"), interactive=False)
+            
+            with gr.Row():
+                new_prompt_a = gr.Textbox(label="新しいプロンプトA", placeholder="追加するプロンプト...", scale=3)
+                add_a_btn = gr.Button("➕ 追加", scale=1)
+            
+            with gr.Row():
+                edit_index_a = gr.Number(label="編集インデックス", value=0, minimum=0, scale=1)
+                edit_content_a = gr.Textbox(label="新しい内容", placeholder="編集後の内容...", scale=2)
+                edit_a_btn = gr.Button("✏️ 編集", scale=1)
+            
+            with gr.Row():
+                remove_index_a = gr.Number(label="削除インデックス", value=0, minimum=0, scale=2)
+                remove_a_btn = gr.Button("🗑️ 削除", scale=1)
+            
+            result_a = gr.Textbox(label="操作結果", interactive=False)
+        
+        # プロンプトBリスト管理
+        with gr.Column():
+            gr.Markdown("### 🅱️ プロンプトBリスト管理")
+            list_b_display = gr.Textbox(label="プロンプトBリスト", lines=8, value=gui.get_list_display("b"), interactive=False)
+            
+            with gr.Row():
+                new_prompt_b = gr.Textbox(label="新しいプロンプトB", placeholder="追加するプロンプト...", scale=3)
+                add_b_btn = gr.Button("➕ 追加", scale=1)
+            
+            with gr.Row():
+                edit_index_b = gr.Number(label="編集インデックス", value=0, minimum=0, scale=1)
+                edit_content_b = gr.Textbox(label="新しい内容", placeholder="編集後の内容...", scale=2)
+                edit_b_btn = gr.Button("✏️ 編集", scale=1)
+            
+            with gr.Row():
+                remove_index_b = gr.Number(label="削除インデックス", value=0, minimum=0, scale=2)
+                remove_b_btn = gr.Button("🗑️ 削除", scale=1)
+            
+            result_b = gr.Textbox(label="操作結果", interactive=False)
+        
+        # プロンプトCリスト管理
+        with gr.Column():
+            gr.Markdown("### 🅾️ プロンプトCリスト管理")
+            list_c_display = gr.Textbox(label="プロンプトCリスト", lines=8, value=gui.get_list_display("c"), interactive=False)
+            
+            with gr.Row():
+                new_prompt_c = gr.Textbox(label="新しいプロンプトC", placeholder="追加するプロンプト...", scale=3)
+                add_c_btn = gr.Button("➕ 追加", scale=1)
+            
+            with gr.Row():
+                edit_index_c = gr.Number(label="編集インデックス", value=0, minimum=0, scale=1)
+                edit_content_c = gr.Textbox(label="新しい内容", placeholder="編集後の内容...", scale=2)
+                edit_c_btn = gr.Button("✏️ 編集", scale=1)
+            
+            with gr.Row():
+                remove_index_c = gr.Number(label="削除インデックス", value=0, minimum=0, scale=2)
+                remove_c_btn = gr.Button("🗑️ 削除", scale=1)
+            
+            result_c = gr.Textbox(label="操作結果", interactive=False)
+    
+    # プロンプトAのイベントハンドラー
+    add_a_btn.click(
+        fn=lambda prompt: gui.add_to_list("a", prompt),
+        inputs=[new_prompt_a],
+        outputs=[result_a, list_a_display]
+    ).then(fn=lambda: "", outputs=[new_prompt_a])
+    
+    edit_a_btn.click(
+        fn=lambda idx, content: gui.edit_list_item("a", idx, content),
+        inputs=[edit_index_a, edit_content_a],
+        outputs=[result_a, list_a_display]
+    ).then(fn=lambda: "", outputs=[edit_content_a])
+    
+    remove_a_btn.click(
+        fn=lambda idx: gui.remove_from_list("a", idx),
+        inputs=[remove_index_a],
+        outputs=[result_a, list_a_display]
+    )
+    
+    # プロンプトBのイベントハンドラー
+    add_b_btn.click(
+        fn=lambda prompt: gui.add_to_list("b", prompt),
+        inputs=[new_prompt_b],
+        outputs=[result_b, list_b_display]
+    ).then(fn=lambda: "", outputs=[new_prompt_b])
+    
+    edit_b_btn.click(
+        fn=lambda idx, content: gui.edit_list_item("b", idx, content),
+        inputs=[edit_index_b, edit_content_b],
+        outputs=[result_b, list_b_display]
+    ).then(fn=lambda: "", outputs=[edit_content_b])
+    
+    remove_b_btn.click(
+        fn=lambda idx: gui.remove_from_list("b", idx),
+        inputs=[remove_index_b],
+        outputs=[result_b, list_b_display]
+    )
+    
+    # プロンプトCのイベントハンドラー
+    add_c_btn.click(
+        fn=lambda prompt: gui.add_to_list("c", prompt),
+        inputs=[new_prompt_c],
+        outputs=[result_c, list_c_display]
+    ).then(fn=lambda: "", outputs=[new_prompt_c])
+    
+    edit_c_btn.click(
+        fn=lambda idx, content: gui.edit_list_item("c", idx, content),
+        inputs=[edit_index_c, edit_content_c],
+        outputs=[result_c, list_c_display]
+    ).then(fn=lambda: "", outputs=[edit_content_c])
+    
+    remove_c_btn.click(
+        fn=lambda idx: gui.remove_from_list("c", idx),
+        inputs=[remove_index_c],
+        outputs=[result_c, list_c_display]
+    )
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
