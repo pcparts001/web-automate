@@ -422,9 +422,23 @@ class ChromeAutomationTool:
             thinking_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Thinking') or contains(text(), 'thinking') or contains(text(), '考え中') or contains(text(), '生成中') or contains(@class, 'thinking')]")
             visible_thinking = [elem for elem in thinking_elements if elem.is_displayed()]
             
+            self.logger.info(f"=== Thinking状態チェック詳細 ===")
+            self.logger.info(f"Thinking要素検索結果: {len(thinking_elements)}個発見")
+            self.logger.info(f"表示中のThinking要素: {len(visible_thinking)}個")
+            
             if visible_thinking:
-                self.logger.info("Thinking中のため再生成ボタンチェックをスキップ")
+                for i, elem in enumerate(visible_thinking[:3]):  # 最初の3個を詳細表示
+                    try:
+                        text = elem.text.strip()
+                        classes = elem.get_attribute("class") or ""
+                        self.logger.info(f"  Thinking要素{i+1}: テキスト='{text}', クラス='{classes}'")
+                    except:
+                        pass
+                
+                self.logger.info("Thinking中のため再生成ボタンチェックをスキップします")
                 return None
+            else:
+                self.logger.info("Thinking状態ではありません - 再生成ボタンチェックを継続")
         except Exception as e:
             self.logger.debug(f"Thinkingチェックエラー: {e}")
         
@@ -930,8 +944,14 @@ class ChromeAutomationTool:
                 continue
         
         # タイムアウトした場合は古いテキストを返さずNoneを返す
-        self.logger.warning(f"ストリーミング応答のタイムアウト（{timeout}秒）- 再生成ボタンチェックのためNoneを返します")
-        # タイムアウト時は古い応答を返さず、get_response_text()で再生成ボタンチェックを行わせる
+        self.logger.warning(f"=== ストリーミングタイムアウト詳細情報 ===")
+        self.logger.warning(f"タイムアウト時間: {timeout}秒")
+        self.logger.warning(f"チェック回数: {max_checks}回（実際に実行された回数）")
+        self.logger.warning(f"チェック間隔: {check_interval}秒")
+        self.logger.warning(f"最後に取得されたテキスト長: {len(previous_text)}文字")
+        self.logger.warning(f"最後のテキスト内容: {self.mask_text_for_debug(previous_text)}")
+        self.logger.warning(f"stable_count: {stable_count}/{required_stable_count}")
+        self.logger.warning("再生成ボタンチェックのためNoneを返します")
         return None
 
     def clean_response_text(self, text):
@@ -1231,9 +1251,24 @@ class ChromeAutomationTool:
                     self.logger.debug(f"get_latest_message_content: wait_for_streaming_response_completeからの戻り値: {masked_final}。final_textを返します。 (5)")
                     return final_text
                 else:
-                    self.logger.warning("ストリーミング検出失敗、現在のテキストを返します")
+                    # ストリーミングタイムアウト時の詳細チェック
+                    self.logger.warning(f"ストリーミング検出失敗またはタイムアウト")
+                    self.logger.info(f"  - final_text: {self.mask_text_for_debug(final_text) if final_text else 'None'}")
+                    self.logger.info(f"  - latest_text: {self.mask_text_for_debug(latest_text)}")
+                    
+                    # Thinking状態の場合はNoneを返して再生成ボタンチェックを促す
+                    if latest_text and ("thinking" in latest_text.lower() or "thinking..." in latest_text):
+                        self.logger.warning("応答がThinking状態のままタイムアウト - 再生成ボタンチェックのためNoneを返します")
+                        return None
+                    
+                    # プロンプトテキストと同じ場合もNoneを返す
+                    if (latest_text.strip() == self.current_prompt_text.strip() or 
+                        latest_text.strip() == self.original_user_prompt.strip()):
+                        self.logger.warning("応答がプロンプトテキストと同一 - 再生成ボタンチェックのためNoneを返します")
+                        return None
+                    
                     masked_latest = self.mask_text_for_debug(latest_text)
-                    self.logger.debug(f"get_latest_message_content: ストリーミング検出失敗のためlatest_textを返します: {masked_latest}。clean_response_textを返します。 (6)")
+                    self.logger.warning(f"ストリーミング失敗だが有効な応答として処理: {masked_latest}")
                     return self.clean_response_text(latest_text)
             else:
                 # ストリーミング待機をスキップ
@@ -1369,7 +1404,17 @@ class ChromeAutomationTool:
         self.current_retry_count = 0
         if hasattr(self, '_regenerate_button_call_count'):
             self._regenerate_button_call_count = 0
-        self.logger.debug("プロンプト処理開始: 状態変数をリセットしました")
+        
+        # 詳細状態ログ
+        self.logger.info(f"=== プロンプト処理開始 ===")
+        self.logger.info(f"プロンプト内容: {self.mask_text_for_debug(prompt_text)}")
+        self.logger.info(f"現在の状態変数:")
+        self.logger.info(f"  - current_retry_count: {getattr(self, 'current_retry_count', 'undefined')}")
+        self.logger.info(f"  - _regenerate_button_call_count: {getattr(self, '_regenerate_button_call_count', 'undefined')}")
+        self.logger.info(f"  - existing_response_count: {getattr(self, 'existing_response_count', 'undefined')}")
+        self.logger.info(f"  - existing_copy_button_count: {getattr(self, 'existing_copy_button_count', 'undefined')}")
+        self.logger.info(f"  - prompt_counter: {getattr(self, 'prompt_counter', 'undefined')}")
+        self.logger.info("状態変数をリセット完了")
         
         # プロンプト送信前の既存応答数とコピーボタン数を記録
         self.existing_response_count = self.count_existing_responses()
@@ -1388,9 +1433,15 @@ class ChromeAutomationTool:
         # 少し待機してから応答をチェック
         time.sleep(3)
         
-        self.logger.info("応答テキストの取得を開始します...")
+        self.logger.info("=== 応答テキスト取得フェーズ開始 ===")
+        self.logger.info("get_response_text()を呼び出し中...")
         response_text = self.get_response_text()
-        self.logger.debug(f"process_single_prompt: get_response_textからの戻り値: {self.mask_text_for_debug(response_text) if response_text else 'None'}")
+        
+        self.logger.info(f"=== get_response_text()結果詳細 ===")
+        self.logger.info(f"戻り値: {self.mask_text_for_debug(response_text) if response_text else 'None'}")
+        self.logger.info(f"戻り値の型: {type(response_text)}")
+        self.logger.info(f"戻り値の長さ: {len(response_text) if response_text else 0}文字")
+        self.logger.info(f"REGENERATE_ERROR_DETECTED判定: {response_text == 'REGENERATE_ERROR_DETECTED'}")
         
         # 再生成エラーの場合は明示的に失敗を返す
         if response_text == "REGENERATE_ERROR_DETECTED":
