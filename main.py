@@ -1421,8 +1421,26 @@ class ChromeAutomationTool:
             masked_response = self.mask_text_for_debug(latest_text)
             self.logger.info(f"🎯 最新応答を特定: message-content-id={latest_id}, 応答内容={masked_response}")
             
+            # wait_for_streamingパラメータのログ出力
+            self.logger.info(f"=== ストリーミング待機判定 ===")
+            self.logger.info(f"wait_for_streaming: {wait_for_streaming}")
+            
+            # Thinking状態の事前チェック
+            if latest_text:
+                thinking_indicators = ['thinking', 'generating', '生成中', '考え中', '█']
+                is_thinking = any(indicator in latest_text.lower() for indicator in thinking_indicators)
+                self.logger.info(f"Thinking状態チェック: {is_thinking}")
+                if is_thinking:
+                    matched_indicators = [ind for ind in thinking_indicators if ind in latest_text.lower()]
+                    self.logger.info(f"  検出されたThinkingキーワード: {matched_indicators}")
+                else:
+                    self.logger.info("  Thinkingキーワードは検出されませんでした")
+            
             if wait_for_streaming:
                 selector = f"[message-content-id='{latest_id}']"
+                self.logger.info("=== ストリーミング待機開始 ===")
+                self.logger.info(f"待機理由: wait_for_streaming=True が指定されているため")
+                self.logger.info(f"監視対象セレクター: {selector}")
                 self.logger.info("ストリーミング応答の完了を待機中...")
                 # タイムアウトを60秒に短縮（デフォルト120秒から）
                 final_text = self.wait_for_streaming_complete_v2(selector, timeout=60)
@@ -1471,8 +1489,10 @@ class ChromeAutomationTool:
                     return self.clean_response_text(latest_text)
             else:
                 # ストリーミング待機をスキップ
+                self.logger.info("=== ストリーミング待機スキップ ===")
+                self.logger.info(f"スキップ理由: wait_for_streaming=False が指定されているため")
                 masked_latest = self.mask_text_for_debug(latest_text)
-                self.logger.debug(f"get_latest_message_content: ストリーミング待機スキップのためlatest_textを返します: {masked_latest}")
+                self.logger.info(f"即座に応答を返します: {masked_latest}")
                 return self.clean_response_text(latest_text)
                 
         except Exception as e:
