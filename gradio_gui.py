@@ -9,6 +9,8 @@ import time
 import queue
 import logging
 import random
+import json
+import os
 from datetime import datetime
 from main import ChromeAutomationTool
 
@@ -20,7 +22,220 @@ class AutomationGUI:
         self.response_queue = queue.Queue()
         self.current_thread = None
         self.chrome_initialized = False
+        self.settings_file = "gui_settings.json"
         
+        # 設定をロード
+        self.settings = self.load_settings()
+    
+    def load_settings(self):
+        """設定ファイルから設定をロード"""
+        try:
+            if os.path.exists(self.settings_file):
+                with open(self.settings_file, 'r', encoding='utf-8') as f:
+                    settings = json.load(f)
+                    print(f"設定ファイルをロードしました: {self.settings_file}")
+                    return settings
+        except Exception as e:
+            print(f"設定ファイルの読み込みエラー: {e}")
+        
+        # デフォルト設定
+        return {
+            "fallback_message": "",
+            "url": "https://www.genspark.ai/agents?type=moa_chat",
+            "prompt_a": "",
+            "prompt_b": "",
+            "prompt_c": ""
+        }
+    
+    def save_settings(self, **kwargs):
+        """設定をファイルに保存"""
+        try:
+            # 現在の設定を更新
+            self.settings.update(kwargs)
+            
+            with open(self.settings_file, 'w', encoding='utf-8') as f:
+                json.dump(self.settings, f, ensure_ascii=False, indent=2)
+            print(f"設定を保存しました: {self.settings_file}")
+            return "✅ 設定を保存しました"
+        except Exception as e:
+            error_msg = f"設定保存エラー: {e}"
+            print(error_msg)
+            return f"❌ {error_msg}"
+        
+    def start_prompt_flow(self, url, prompt_a, prompt_b, prompt_c, use_fallback, fallback_message, retry_count):
+        """プロンプトフロー自動化を開始"""
+        if self.is_running:
+            return "⚠️ 既に実行中です", "", "実行中"
+            
+        if not prompt_a.strip() or not prompt_b.strip() or not prompt_c.strip():
+            return "❌ プロンプトA、B、Cすべてを入力してください", "", "待機中"
+            
+        self.is_running = True
+        
+        # バックグラウンドスレッドで実行
+        self.current_thread = threading.Thread(
+            target=self._run_prompt_flow,
+            args=(url, prompt_a, prompt_b, prompt_c, use_fallback, fallback_message, retry_count),
+            daemon=True
+        )
+        self.current_thread.start()
+        
+        return "🔄 プロンプトフローを開始しました", "", "実行中"
+    
+    def _run_prompt_flow(self, url, prompt_a, prompt_b, prompt_c, use_fallback, fallback_message, retry_count):
+        """プロンプトフローのバックグラウンド実行"""
+        try:
+            # Chrome初期化
+            if not self.chrome_initialized:
+                self.status_queue.put("🌐 Chrome初期化中...")
+                self.tool = ChromeAutomationTool()
+                if not self.tool.launch_chrome():
+                    self.status_queue.put("❌ Chrome起動に失敗")
+                    self.response_queue.put("Chrome起動に失敗しました")
+                    return
+                self.chrome_initialized = True
+                
+            # URLナビゲーション
+            if url.strip() and url.strip() != "https://www.genspark.ai/agents?type=moa_chat":
+                self.status_queue.put(f"URLに移動中: {url}")
+                self.tool.driver.get(url.strip())
+                time.sleep(3)
+            
+            # retry_countを設定
+            if hasattr(self.tool, 'max_regenerate_retries'):
+                self.tool.max_regenerate_retries = max(1, int(retry_count))
+            
+            cycle_count = 0
+            
+            # 最初にプロンプトAを送信
+            if self.is_running:
+                cycle_count += 1
+                self.status_queue.put(f"🔄 サイクル{cycle_count}: プロンプトA送信")
+                
+                wait_time = random.randint(5, 30)
+                self.status_queue.put(f"⏱️ プロンプトA送信前の待機中... ({wait_time}秒)")
+                
+                for i in range(wait_time):
+                    if not self.is_running:
+                        return
+                    time.sleep(1)
+                
+                self.status_queue.put(f"📤 プロンプトA送信中: {prompt_a[:50]}...")
+                response_a = self._send_prompt_with_retry(prompt_a, use_fallback, fallback_message, retry_count)
+                
+                if response_a == "STOPPED":
+                    return
+                elif response_a and response_a != "ERROR":
+                    # ファイル保存
+                    try:
+                        filepath = self.tool.save_to_markdown(response_a, prompt_a)
+                        self.response_queue.put(f"[プロンプトA] {response_a}")
+                        self.status_queue.put(f"✅ プロンプトA完了、ファイル保存: {filepath}")
+                    except Exception as save_error:
+                        self.status_queue.put(f"⚠️ ファイル保存エラー: {save_error}")
+                        self.response_queue.put(f"[プロンプトA] {response_a}")
+                else:
+                    self.status_queue.put(f"❌ プロンプトAでエラーが発生")
+                    # エラーでも続行
+            
+            # B→C→B→Cの無限ループ
+            while self.is_running:
+                # プロンプトB送信
+                if self.is_running:
+                    wait_time = random.randint(5, 30)
+                    self.status_queue.put(f"⏱️ プロンプトB送信前の待機中... ({wait_time}秒)")
+                    
+                    for i in range(wait_time):
+                        if not self.is_running:
+                            return
+                        time.sleep(1)
+                    
+                    self.status_queue.put(f"📤 プロンプトB送信中: {prompt_b[:50]}...")
+                    response_b = self._send_prompt_with_retry(prompt_b, use_fallback, fallback_message, retry_count)
+                    
+                    if response_b == "STOPPED":
+                        return
+                    elif response_b and response_b != "ERROR":
+                        try:
+                            filepath = self.tool.save_to_markdown(response_b, prompt_b)
+                            self.response_queue.put(f"[プロンプトB] {response_b}")
+                            self.status_queue.put(f"✅ プロンプトB完了、ファイル保存: {filepath}")
+                        except Exception as save_error:
+                            self.status_queue.put(f"⚠️ ファイル保存エラー: {save_error}")
+                            self.response_queue.put(f"[プロンプトB] {response_b}")
+                    else:
+                        self.status_queue.put(f"❌ プロンプトBでエラーが発生")
+                
+                # プロンプトC送信
+                if self.is_running:
+                    wait_time = random.randint(5, 30)
+                    self.status_queue.put(f"⏱️ プロンプトC送信前の待機中... ({wait_time}秒)")
+                    
+                    for i in range(wait_time):
+                        if not self.is_running:
+                            return
+                        time.sleep(1)
+                    
+                    self.status_queue.put(f"📤 プロンプトC送信中: {prompt_c[:50]}...")
+                    response_c = self._send_prompt_with_retry(prompt_c, use_fallback, fallback_message, retry_count)
+                    
+                    if response_c == "STOPPED":
+                        return
+                    elif response_c and response_c != "ERROR":
+                        try:
+                            filepath = self.tool.save_to_markdown(response_c, prompt_c)
+                            self.response_queue.put(f"[プロンプトC] {response_c}")
+                            self.status_queue.put(f"✅ プロンプトC完了、ファイル保存: {filepath}")
+                        except Exception as save_error:
+                            self.status_queue.put(f"⚠️ ファイル保存エラー: {save_error}")
+                            self.response_queue.put(f"[プロンプトC] {response_c}")
+                    else:
+                        self.status_queue.put(f"❌ プロンプトCでエラーが発生")
+                
+                cycle_count += 1
+                self.status_queue.put(f"🔄 サイクル{cycle_count}完了、次のB→Cサイクルへ...")
+                
+        except Exception as e:
+            error_msg = f"プロンプトフローエラー: {str(e)}"
+            self.status_queue.put(f"❌ {error_msg}")
+            self.response_queue.put(error_msg)
+        finally:
+            self.is_running = False
+    
+    def _send_prompt_with_retry(self, prompt, use_fallback, fallback_message, retry_count):
+        """プロンプト送信とリトライ処理"""
+        try:
+            # プロンプト送信 - process_single_promptは戻り値が(success, response_text)のタプル
+            success, response_text = self.tool.process_single_prompt(prompt)
+            
+            if not success or response_text == "REGENERATE_ERROR_DETECTED":
+                if use_fallback and fallback_message.strip():
+                    self.status_queue.put("🔄 フォールバックメッセージでリトライ中...")
+                    
+                    for retry in range(retry_count):
+                        if not self.is_running:
+                            return "STOPPED"
+                            
+                        # フォールバック前の待機
+                        time.sleep(5)
+                        
+                        fallback_success, fallback_response = self.tool.process_single_prompt(fallback_message)
+                        
+                        if fallback_success and fallback_response != "REGENERATE_ERROR_DETECTED":
+                            self.status_queue.put(f"✅ フォールバック成功 (試行{retry + 1}回目)")
+                            return fallback_response
+                        
+                        self.status_queue.put(f"⚠️ フォールバック失敗 (試行{retry + 1}回目)")
+                    
+                    return "ERROR"
+                else:
+                    return "ERROR"
+            else:
+                return response_text
+                
+        except Exception as e:
+            return f"ERROR: {str(e)}"
+
     def mask_response_for_debug(self, text, max_preview=6):
         """応答テキストをデバッグ用にマスキング（プライバシー保護強化）"""
         if not text:
@@ -229,14 +444,28 @@ def create_interface():
         
         with gr.Row():
             with gr.Column(scale=2):
-                url_input = gr.Textbox(label="📍 URL", value="https://www.genspark.ai/agents?type=moa_chat", placeholder="移動先URL（空白でデフォルト）")
+                url_input = gr.Textbox(label="📍 URL", value=gui.settings.get("url", "https://www.genspark.ai/agents?type=moa_chat"), placeholder="移動先URL（空白でデフォルト）")
                 prompt_input = gr.Textbox(label="💬 プロンプト", lines=4, placeholder="送信するプロンプトを入力してください...")
                 
                 with gr.Row():
                     use_fallback = gr.Checkbox(label="フォールバックメッセージを使用", value=True)
                     retry_count = gr.Number(label="最大リトライ回数", value=20, minimum=1, maximum=50)
                 
-                fallback_input = gr.Textbox(label="📝 フォールバックメッセージ", lines=2, placeholder="エラー時の代替メッセージ...", visible=True)
+                fallback_input = gr.Textbox(label="📝 フォールバックメッセージ", lines=2, placeholder="エラー時の代替メッセージ...", visible=True, value=gui.settings.get("fallback_message", ""))
+                
+                # Phase1: 複数プロンプト機能
+                gr.Markdown("### 🔄 プロンプトフロー機能")
+                prompt_a_input = gr.Textbox(label="🅰️ プロンプトA (初期プロンプト)", lines=3, placeholder="最初に送信するプロンプト...", value=gui.settings.get("prompt_a", ""))
+                prompt_b_input = gr.Textbox(label="🅱️ プロンプトB (追加情報要求)", lines=3, placeholder="追加情報の候補をリクエストするプロンプト...", value=gui.settings.get("prompt_b", ""))
+                prompt_c_input = gr.Textbox(label="🅾️ プロンプトC (候補承認)", lines=3, placeholder="提案された候補にOKするプロンプト...", value=gui.settings.get("prompt_c", ""))
+                
+                with gr.Row():
+                    prompt_flow_btn = gr.Button("🔄 プロンプトフロー開始", variant="primary")
+                    flow_stop_btn = gr.Button("⏹️ フロー停止", variant="stop")
+                
+                # 設定保存ボタン
+                save_settings_btn = gr.Button("💾 設定を保存", variant="secondary")
+                save_status = gr.Textbox(label="保存状況", value="", visible=False, interactive=False)
                 
                 use_fallback.change(fn=lambda x: gr.update(visible=x), inputs=[use_fallback], outputs=[fallback_input])
                 
@@ -255,6 +484,35 @@ def create_interface():
         )
         
         stop_btn.click(fn=gui.stop_automation, outputs=[status_display, status_display])
+        
+        # プロンプトフローボタンのイベント
+        prompt_flow_btn.click(
+            fn=gui.start_prompt_flow,
+            inputs=[url_input, prompt_a_input, prompt_b_input, prompt_c_input, use_fallback, fallback_input, retry_count],
+            outputs=[status_display, response_display, status_display]
+        )
+        
+        flow_stop_btn.click(fn=gui.stop_automation, outputs=[status_display, status_display])
+        
+        # 設定保存ボタンのイベント
+        save_settings_btn.click(
+            fn=lambda url, fallback, pa, pb, pc: gui.save_settings(
+                url=url, 
+                fallback_message=fallback,
+                prompt_a=pa,
+                prompt_b=pb,
+                prompt_c=pc
+            ),
+            inputs=[url_input, fallback_input, prompt_a_input, prompt_b_input, prompt_c_input],
+            outputs=[save_status]
+        ).then(
+            fn=lambda: gr.update(visible=True),
+            outputs=[save_status]
+        ).then(
+            fn=lambda: gr.update(visible=False),
+            outputs=[save_status],
+            _js="() => setTimeout(() => {}, 2000)"  # 2秒後に非表示
+        )
         
         interface.load(
             fn=lambda: (gui.get_status_update(), gui.get_response_update()),
