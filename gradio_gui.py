@@ -8,6 +8,7 @@ import threading
 import time
 import queue
 import logging
+import random
 from datetime import datetime
 from main import ChromeAutomationTool
 
@@ -121,25 +122,47 @@ class AutomationGUI:
                         continue
 
                     self.status_queue.put("⏳ 送信後、応答を待機中...")
-                    time.sleep(5) # 応答生成のための十分な待機時間
+                    time.sleep(5) # 応答生成のための初期待機時間
+
+                    # より長い待機時間でストリーミング応答の完了を待つ
+                    self.status_queue.put("⏳ ストリーミング完了を待機中...")
+                    time.sleep(8) # 追加待機でストリーミング応答を確実に取得
 
                     # 応答をチェック
                     final_response = self.tool.get_response_text()
 
-                    if final_response and final_response != "REGENERATE_ERROR_DETECTED":
-                        # 応答内容を検証
+                    if final_response == "REGENERATE_ERROR_DETECTED":
+                        # フォールバック後にも再生成ボタンが表示された場合
+                        self.status_queue.put(f"⚠️ フォールバック後も再生成ボタンが表示されました ({attempt + 1}回目)")
+                        # 次のリトライまでランダム待機時間
+                        wait_time = random.randint(1, 5)
+                        time.sleep(wait_time)
+                        continue  # 次のリトライループへ
+                    elif final_response and final_response != "REGENERATE_ERROR_DETECTED":
+                        # 正常な応答を受信した場合
                         is_long_enough = len(final_response.strip()) > 100
                         is_not_echo = fallback_message.strip()[:20] not in final_response
                         
                         if is_long_enough and is_not_echo:
                             self.status_queue.put(f"✅ フォールバック成功！ ({attempt + 1}回目)")
                             self.response_queue.put(final_response)
+                            
+                            # フォールバック成功時に応答をMarkdownファイルに保存
+                            try:
+                                filepath = self.tool.save_to_markdown(final_response, self.tool.original_user_prompt or prompt_text)
+                                self.status_queue.put(f"📁 応答をMarkdownファイルに保存しました: {filepath}")
+                                self.tool.logger.info(f"フォールバック成功応答をファイルに保存: {filepath}")
+                            except Exception as save_error:
+                                self.tool.logger.error(f"フォールバック応答の保存中にエラー: {save_error}")
+                                self.status_queue.put(f"⚠️ ファイル保存エラー: {save_error}")
+                            
                             fallback_success = True
                             break
                         else:
                             self.status_queue.put(f"⚠️ 応答が不適切 (長さ: {len(final_response.strip())}, エコーでない: {is_not_echo})")
                     else:
-                        self.status_queue.put("⚠️ まだ再生成ボタンが表示されているか、応答がありません")
+                        # 応答が取得できない場合
+                        self.status_queue.put(f"⚠️ 応答が取得できませんでした ({attempt + 1}回目)")
 
                 if not fallback_success:
                     self.status_queue.put(f"❌ {max_fallback_retries}回のフォールバックリトライがすべて失敗しました。")
