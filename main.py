@@ -1071,10 +1071,35 @@ class ChromeAutomationTool:
                     time.sleep(check_interval)
                     continue
                 
+                # Thinking終了直後の5秒待機
+                self.logger.info("Thinking状態が終了しました。5秒待機してからエラーチェックを開始します...")
+                time.sleep(5)
+                
                 # エラーメッセージの検出
-                if "応答を再生成" in current_text or "再生成" in current_text:
-                    self.logger.warning(f"再生成メッセージを検出: {element_type}")
+                self.logger.info("=== エラーチェック開始 ===")
+                self.logger.info("再生成メッセージの有無をチェック中...")
+                
+                # 方法1: テキスト内容での判定
+                text_based_error = "応答を再生成" in current_text or "再生成" in current_text
+                self.logger.info(f"テキスト内容チェック結果: {'検出' if text_based_error else '未検出'}")
+                
+                # 方法2: DOM要素での判定
+                self.logger.info("DOM要素での再生成ボタン検索を実行中...")
+                dom_based_button = self.find_regenerate_button()
+                self.logger.info(f"DOM要素チェック結果: {'検出' if dom_based_button else '未検出'}")
+                
+                # どちらが成功したかのログ出力
+                if text_based_error and dom_based_button:
+                    self.logger.warning("両方の方法で再生成エラーを検出しました（テキスト + DOM要素）")
                     return "REGENERATE_ERROR_DETECTED"
+                elif text_based_error:
+                    self.logger.warning("テキスト内容で再生成エラーを検出しました")
+                    return "REGENERATE_ERROR_DETECTED"
+                elif dom_based_button:
+                    self.logger.warning("DOM要素で再生成ボタンを検出しました")
+                    return "REGENERATE_ERROR_DETECTED"
+                else:
+                    self.logger.info("どちらの方法でも再生成エラーは検出されませんでした")
                 
                 # コピーボタンによる完了判定
                 try:
