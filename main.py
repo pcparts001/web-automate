@@ -718,7 +718,10 @@ class ChromeAutomationTool:
         except Exception as e:
             self.logger.warning(f"初回要素情報取得エラー: {e}")
         
+        self.logger.info(f"最大 {max_checks} 回のチェックを開始（タイムアウト: {timeout}秒）")
+        
         for i in range(max_checks):
+            self.logger.debug(f"ストリーミングチェック {i+1}/{max_checks}")
             try:
                 # 要素を再取得（Stale Element対策）
                 current_element = None
@@ -809,6 +812,7 @@ class ChromeAutomationTool:
                 # 「応答を再生成」メッセージの検出（エラー状態）
                 if "応答を再生成" in current_text or "再生成" in current_text:
                     self.logger.warning(f"再生成メッセージを検出 - エラー状態: '{current_text[:100]}'")
+                    self.logger.info(f"セレクター: {response_element_selector}, チェック回数: {i+1}/{max_checks}")
                     # エラー状態として特別なフラグを返す
                     return "REGENERATE_ERROR_DETECTED"
                 
@@ -1216,7 +1220,8 @@ class ChromeAutomationTool:
             if wait_for_streaming:
                 selector = f"[message-content-id='{latest_id}']"
                 self.logger.info("ストリーミング応答の完了を待機中...")
-                final_text = self.wait_for_streaming_response_complete(selector)
+                # タイムアウトを60秒に短縮（デフォルト120秒から）
+                final_text = self.wait_for_streaming_response_complete(selector, timeout=60)
                 
                 if final_text == "REGENERATE_ERROR_DETECTED":
                     self.logger.warning(f"再生成エラーが検出され���した")
@@ -1367,9 +1372,9 @@ class ChromeAutomationTool:
         self.existing_copy_button_count = self.count_existing_copy_buttons()
         self.current_prompt_text = prompt_text
         
-        if not self.original_user_prompt:
-            self.original_user_prompt = prompt_text
-            self.logger.info(f"ユーザー元プロンプトを記録: {self.mask_text_for_debug(self.original_user_prompt)}")
+        # 新しいプロンプト処理のたびにoriginal_user_promptを更新
+        self.original_user_prompt = prompt_text
+        self.logger.info(f"ユーザー元プロンプトを更新: {self.mask_text_for_debug(self.original_user_prompt)}")
         
         # 統一された送信メソッドを呼び出す
         if not self.send_message(prompt_text):
