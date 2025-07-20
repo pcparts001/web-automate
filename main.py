@@ -929,11 +929,9 @@ class ChromeAutomationTool:
                 time.sleep(check_interval)
                 continue
         
-        # タイムアウトした場合でも、最後に取得できたテキストを返す
-        self.logger.warning(f"ストリーミング応答のタイムアウト（{timeout}秒）")
-        if previous_text:
-            cleaned_text = self.clean_response_text(previous_text)
-            return cleaned_text
+        # タイムアウトした場合は古いテキストを返さずNoneを返す
+        self.logger.warning(f"ストリーミング応答のタイムアウト（{timeout}秒）- 再生成ボタンチェックのためNoneを返します")
+        # タイムアウト時は古い応答を返さず、get_response_text()で再生成ボタンチェックを行わせる
         return None
 
     def clean_response_text(self, text):
@@ -1367,6 +1365,12 @@ class ChromeAutomationTool:
     
     def process_single_prompt(self, prompt_text):
         """単一のプロンプトを処理（メイン処理）"""
+        # 新しいプロンプト処理開始時に状態変数をリセット
+        self.current_retry_count = 0
+        if hasattr(self, '_regenerate_button_call_count'):
+            self._regenerate_button_call_count = 0
+        self.logger.debug("プロンプト処理開始: 状態変数をリセットしました")
+        
         # プロンプト送信前の既存応答数とコピーボタン数を記録
         self.existing_response_count = self.count_existing_responses()
         self.existing_copy_button_count = self.count_existing_copy_buttons()
