@@ -1337,7 +1337,11 @@ def create_prompt_list_tab(gui, bc_loop_input=None):
             fn=create_set_with_refresh,
             inputs=[new_set_name, bc_loop_input],  # bc_loop_inputを一貫性のため含める
             outputs=[create_set_result, set_selector, current_set_display]
-        ).then(fn=lambda: "", outputs=[new_set_name])
+        ).then(
+            fn=lambda bc_count: "",  # bc_loop_inputをダミーinputとして受け取る
+            inputs=[bc_loop_input],  # 一貫性のためbc_loop_inputを含める
+            outputs=[new_set_name]
+        )
         
         # Stage 9a + 11a: プロンプトセット切り替えイベントハンドラー（セット名自動入力機能追加）
         def switch_set_with_refresh(selected_set, bc_count):
