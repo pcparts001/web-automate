@@ -1475,8 +1475,10 @@ class ChromeAutomationTool:
         self.logger.debug(f"get_response_text: get_latest_message_contentからの戻り値: {self.mask_text_for_debug(latest_response_text) if latest_response_text else 'None'}")
         
         if latest_response_text:
-            self.logger.debug(f"get_response_text: 最終的に返す応答テキスト: {self.mask_text_for_debug(latest_response_text)}")
-            return latest_response_text
+            # clean_response_text()を通して改行処理も適用
+            cleaned_text = self.clean_response_text(latest_response_text)
+            self.logger.debug(f"get_response_text: clean_response_text()処理後: {self.mask_text_for_debug(cleaned_text)}")
+            return cleaned_text
         
         # 応答が取得できない場合は再生成ボタンをチェック
         self.logger.warning("応答が取得できないため再生成ボタンをチェックします")
