@@ -129,14 +129,22 @@ class AutomationGUI:
         if not new_prompt.strip():
             return f"❌ プロンプトが空です", self.get_list_display(prompt_type)
             
+        # デバッグログ: 追加操作詳細
+        current_active = self.settings.get("active_prompt_set", "unknown")
+        print(f"[DEBUG] プロンプト{prompt_type.upper()}追加: アクティブセット='{current_active}', 追加内容='{new_prompt.strip()}'")
+        
         # アクティブセットに追加
         active_set = self.get_active_prompt_set()
         list_key = f"prompt_{prompt_type}_list"
         
         if list_key not in active_set:
             active_set[list_key] = []
-            
+        
+        old_count = len(active_set[list_key])    
         active_set[list_key].append(new_prompt.strip())
+        new_count = len(active_set[list_key])
+        print(f"[DEBUG] {prompt_type.upper()}リスト: {old_count}項目 → {new_count}項目")
+        
         self.save_settings()
         
         return f"✅ プロンプト{prompt_type.upper()}リストに追加しました", self.get_list_display(prompt_type)
@@ -267,6 +275,10 @@ class AutomationGUI:
         
         set_name = set_name.strip()
         
+        # 設定を強制的に再読み込みしてUIとの同期を確保
+        print(f"[DEBUG] セット作成前: 設定再読み込み実行")
+        self.load_settings()
+        
         # Stage 11b: 既存セット上書き機能（削除→新規作成方式）
         if set_name in self.settings.get("prompt_sets", {}):
             # 既存セットを削除してから新規作成
@@ -275,9 +287,7 @@ class AutomationGUI:
         else:
             overwrite_message = ""
         
-        # 最新のアクティブセットの内容を取得してコピー（同期問題対策）
-        # 強制的に設定を再読み込み
-        self.load_settings()
+        # 最新のアクティブセットの内容を取得してコピー
         active_set = self.get_active_prompt_set()
         
         # デバッグログ: セット作成時の詳細情報
@@ -318,9 +328,22 @@ class AutomationGUI:
         if not set_name or set_name not in self.settings.get("prompt_sets", {}):
             return f"❌ セット '{set_name}' が見つかりません"
         
+        # デバッグログ: セット切り替え詳細
+        old_active = self.settings.get("active_prompt_set", "unknown")
+        print(f"[DEBUG] セット切り替え: '{old_active}' → '{set_name}'")
+        
         # アクティブセットを変更
         self.settings["active_prompt_set"] = set_name
+        print(f"[DEBUG] メモリ内設定更新: active_prompt_set='{self.settings.get('active_prompt_set', 'unknown')}'")
+        
+        # 設定をファイルに保存
         self.save_settings()
+        print(f"[DEBUG] 設定ファイル保存完了")
+        
+        # 保存後の確認のため設定を再読み込み
+        self.load_settings()
+        final_active = self.settings.get("active_prompt_set", "unknown")
+        print(f"[DEBUG] ファイル保存確認: 再読み込み後のアクティブセット='{final_active}'")
         
         return f"✅ プロンプトセットを '{set_name}' に切り替えました"
     
