@@ -31,6 +31,26 @@ class AutomationGUI:
         
         # 設定をロード
         self.settings = self.load_settings()
+        
+        # メモリ内設定の強制クリーンアップ（旧キー削除）
+        self._cleanup_memory_settings()
+    
+    def _cleanup_memory_settings(self):
+        """メモリ内設定から旧構造のキーを削除"""
+        old_keys_to_remove = [
+            "prompt_a", "prompt_b", "prompt_c",
+            "prompt_a_list", "prompt_b_list", "prompt_c_list", 
+            "use_list_a", "use_list_b", "use_list_c"
+        ]
+        keys_removed = []
+        for key in old_keys_to_remove:
+            if key in self.settings:
+                del self.settings[key]
+                keys_removed.append(key)
+        
+        if keys_removed:
+            print(f"[DEBUG] メモリ内旧キー削除: {keys_removed}")
+            print(f"[DEBUG] クリーンアップ後キー一覧: {list(self.settings.keys())}")
     
     def load_settings(self):
         """設定ファイルから設定をロード（prompt_sets構造対応）"""
@@ -44,6 +64,28 @@ class AutomationGUI:
                     if "prompt_sets" not in settings:
                         print("Stage 4: 旧構造から新構造（prompt_sets）に移行中...")
                         settings = self._migrate_to_prompt_sets(settings)
+                    else:
+                        # 新構造でも旧キーが残っている場合のクリーンアップ
+                        old_keys_to_remove = [
+                            "prompt_a", "prompt_b", "prompt_c",
+                            "prompt_a_list", "prompt_b_list", "prompt_c_list", 
+                            "use_list_a", "use_list_b", "use_list_c"
+                        ]
+                        keys_removed = []
+                        for key in old_keys_to_remove:
+                            if key in settings:
+                                del settings[key]
+                                keys_removed.append(key)
+                        
+                        if keys_removed:
+                            print(f"[DEBUG] 読み込み時旧キー削除: {keys_removed}")
+                            # クリーンアップ後再保存
+                            try:
+                                with open(self.settings_file, 'w', encoding='utf-8') as f:
+                                    json.dump(settings, f, ensure_ascii=False, indent=2)
+                                print(f"✅ 設定ファイルクリーンアップ完了")
+                            except Exception as e:
+                                print(f"❌ クリーンアップ保存エラー: {e}")
                     
                     return settings
         except Exception as e:
