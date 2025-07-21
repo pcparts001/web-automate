@@ -742,10 +742,10 @@ def create_interface():
         # タブ切り替え
         with gr.Tabs():
             with gr.TabItem("🚀 メイン機能"):
-                status_display, response_display = create_main_tab(gui)
+                status_display, response_display, bc_loop_input = create_main_tab(gui)
             
             with gr.TabItem("📝 プロンプトリストの編集"):
-                create_prompt_list_tab(gui)
+                create_prompt_list_tab(gui, bc_loop_input)
         
         # リアルタイム更新設定
         interface.load(
@@ -847,9 +847,9 @@ def create_main_tab(gui):
         outputs=[save_status]
     )
     
-    return status_display, response_display
+    return status_display, response_display, bc_loop_input
 
-def create_prompt_list_tab(gui):
+def create_prompt_list_tab(gui, bc_loop_input):
     """プロンプトリスト編集タブのコンポーネントを作成"""
     
     # 統合リスト表示セクション（Stage 1-2: 表示+追加機能+セット管理）
@@ -1069,16 +1069,16 @@ def create_prompt_list_tab(gui):
         
         return result_msg, gr.update(choices=updated_choices)
     
-    # Numberコンポーネント参照一貫性のため、既存のNumberコンポーネントをダミーinputに追加
+    # Numberコンポーネント参照一貫性のため、全Numberコンポーネント（bc_loop_input含む）をダミーinputに追加
     switch_set_btn.click(
-        fn=lambda selector, idx_a, idx_b, idx_c, ridx_a, ridx_b, ridx_c: switch_prompt_set_with_updates(selector),
-        inputs=[set_selector, edit_index_a, edit_index_b, edit_index_c, remove_index_a, remove_index_b, remove_index_c],
+        fn=lambda selector, bc_loop, idx_a, idx_b, idx_c, ridx_a, ridx_b, ridx_c: switch_prompt_set_with_updates(selector),
+        inputs=[set_selector, bc_loop_input, edit_index_a, edit_index_b, edit_index_c, remove_index_a, remove_index_b, remove_index_c],
         outputs=[set_operation_result, current_set_display, unified_list_display, list_a_display, list_b_display, list_c_display]
     )
     
     create_set_btn.click(
-        fn=lambda name, idx_a, idx_b, idx_c, ridx_a, ridx_b, ridx_c: create_prompt_set_with_updates(name),
-        inputs=[new_set_name, edit_index_a, edit_index_b, edit_index_c, remove_index_a, remove_index_b, remove_index_c],
+        fn=lambda name, bc_loop, idx_a, idx_b, idx_c, ridx_a, ridx_b, ridx_c: create_prompt_set_with_updates(name),
+        inputs=[new_set_name, bc_loop_input, edit_index_a, edit_index_b, edit_index_c, remove_index_a, remove_index_b, remove_index_c],
         outputs=[set_operation_result, set_selector]
     ).then(fn=lambda: "", outputs=[new_set_name])
 
