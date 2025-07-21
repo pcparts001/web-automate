@@ -336,9 +336,22 @@ class AutomationGUI:
         self.settings["active_prompt_set"] = set_name
         print(f"[DEBUG] メモリ内設定更新: active_prompt_set='{self.settings.get('active_prompt_set', 'unknown')}'")
         
+        # 保存前の詳細デバッグ
+        print(f"[DEBUG] 保存前のself.settings内容抜粋: active_prompt_set='{self.settings.get('active_prompt_set', 'NOT_FOUND')}'")
+        print(f"[DEBUG] settings辞書のキー一覧: {list(self.settings.keys())}")
+        
         # 設定をファイルに保存
         self.save_settings()
         print(f"[DEBUG] 設定ファイル保存完了")
+        
+        # ファイル保存直後の内容確認
+        try:
+            with open(self.settings_file, 'r', encoding='utf-8') as f:
+                file_content = json.load(f)
+                file_active = file_content.get("active_prompt_set", "NOT_FOUND_IN_FILE")
+                print(f"[DEBUG] ファイル直読み確認: active_prompt_set='{file_active}'")
+        except Exception as e:
+            print(f"[DEBUG] ファイル直読みエラー: {e}")
         
         # 保存後の確認のため設定を再読み込み
         self.settings = self.load_settings()
