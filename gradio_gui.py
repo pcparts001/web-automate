@@ -135,7 +135,8 @@ class AutomationGUI:
         
         items = []
         for i, prompt in enumerate(self.settings[list_key]):
-            items.append(f"{i}: {prompt}")
+            preview = prompt[:50] + "..." if len(prompt) > 50 else prompt
+            items.append(f"{i}: {preview}")
         
         return f"プロンプト{prompt_type.upper()}リスト ({len(self.settings[list_key])}件):\n" + "\n".join(items)
     
@@ -681,8 +682,9 @@ def create_main_tab(gui):
 
 def create_prompt_list_tab(gui):
     """プロンプトリスト編集タブのコンポーネントを作成"""
-    # プロンプトAリスト管理
-    with gr.Column():
+    with gr.Row():
+        # プロンプトAリスト管理
+        with gr.Column():
             gr.Markdown("### 🅰️ プロンプトAリスト管理")
             list_a_display = gr.Textbox(label="プロンプトAリスト", lines=8, value=gui.get_list_display("a"), interactive=False)
             
@@ -700,9 +702,9 @@ def create_prompt_list_tab(gui):
                 remove_a_btn = gr.Button("🗑️ 削除", scale=1)
             
             result_a = gr.Textbox(label="操作結果", interactive=False)
-    
-    # プロンプトBリスト管理
-    with gr.Column():
+        
+        # プロンプトBリスト管理
+        with gr.Column():
             gr.Markdown("### 🅱️ プロンプトBリスト管理")
             list_b_display = gr.Textbox(label="プロンプトBリスト", lines=8, value=gui.get_list_display("b"), interactive=False)
             
@@ -720,9 +722,9 @@ def create_prompt_list_tab(gui):
                 remove_b_btn = gr.Button("🗑️ 削除", scale=1)
             
             result_b = gr.Textbox(label="操作結果", interactive=False)
-    
-    # プロンプトCリスト管理
-    with gr.Column():
+        
+        # プロンプトCリスト管理
+        with gr.Column():
             gr.Markdown("### 🅾️ プロンプトCリスト管理")
             list_c_display = gr.Textbox(label="プロンプトCリスト", lines=8, value=gui.get_list_display("c"), interactive=False)
             
