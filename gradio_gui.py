@@ -135,8 +135,7 @@ class AutomationGUI:
         
         items = []
         for i, prompt in enumerate(self.settings[list_key]):
-            preview = prompt[:50] + "..." if len(prompt) > 50 else prompt
-            items.append(f"{i}: {preview}")
+            items.append(f"{i}: {prompt}")
         
         return f"プロンプト{prompt_type.upper()}リスト ({len(self.settings[list_key])}件):\n" + "\n".join(items)
     
