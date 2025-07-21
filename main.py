@@ -1122,7 +1122,28 @@ class ChromeAutomationTool:
                     cleaned_text = cleaned_text[:pattern_index].strip()
                     self.logger.debug(f"不要なパターン「{pattern}」を除去")
         
-        return cleaned_text.strip()
+        # 改行が検出されたら同じ場所にもう一つ改行を追加
+        cleaned_text = cleaned_text.strip()
+        original_newline_count = cleaned_text.count('\n')
+        self.logger.info(f"改行処理開始: 元テキスト改行数={original_newline_count}")
+        
+        if '\n' in cleaned_text:
+            self.logger.info("改行が検出されました - 二重改行変換を実行中...")
+            # 単一改行を二重改行に変換（ただし、既に二重改行の部分は変更しない）
+            cleaned_text = cleaned_text.replace('\n\n', '\n__DOUBLE_NEWLINE__')  # 既存の二重改行を一時的に保護
+            protected_double_count = cleaned_text.count('\n__DOUBLE_NEWLINE__')
+            self.logger.info(f"既存の二重改行を保護: {protected_double_count}箇所")
+            
+            cleaned_text = cleaned_text.replace('\n', '\n\n')  # 単一改行を二重改行に
+            cleaned_text = cleaned_text.replace('\n__DOUBLE_NEWLINE__', '\n\n')  # 保護した二重改行を復元
+            
+            final_newline_count = cleaned_text.count('\n')
+            self.logger.info(f"改行処理完了: {original_newline_count} → {final_newline_count}個の改行")
+            self.logger.info("✅ 改行を二重改行に変換しました")
+        else:
+            self.logger.info("改行が検出されませんでした - 変換をスキップ")
+        
+        return cleaned_text
 
     def count_existing_responses(self):
         """既存の応答要素数をカウント"""
@@ -1454,8 +1475,10 @@ class ChromeAutomationTool:
         self.logger.debug(f"get_response_text: get_latest_message_contentからの戻り値: {self.mask_text_for_debug(latest_response_text) if latest_response_text else 'None'}")
         
         if latest_response_text:
-            self.logger.debug(f"get_response_text: 最終的に返す応答テキスト: {self.mask_text_for_debug(latest_response_text)}")
-            return latest_response_text
+            # clean_response_text()を通して改行処理も適用
+            cleaned_text = self.clean_response_text(latest_response_text)
+            self.logger.debug(f"get_response_text: clean_response_text()処理後: {self.mask_text_for_debug(cleaned_text)}")
+            return cleaned_text
         
         # 応答が取得できない場合は再生成ボタンをチェック
         self.logger.warning("応答が取得できないため再生成ボタンをチェックします")
