@@ -420,8 +420,8 @@ python gradio_gui.py
 - [x] Gradio Numberコンポーネント参照箇所特定（7箇所確認）
 
 #### **Phase 2: get_random_prompt()メソッド修正**
-- [ ] 統合プロンプトリスト対応版への更新（`self.settings`→`get_active_prompt_set()`）
-- [ ] デバッグログ追加
+- [x] 統合プロンプトリスト対応版への更新（`self.settings`→`get_active_prompt_set()`）
+- [x] デバッグログ追加
 - [ ] 単体動作確認（GUI起動・基本動作テスト）
 
 #### **Phase 3: UI連携機能追加**

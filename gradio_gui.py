@@ -502,16 +502,26 @@ class AutomationGUI:
             return f"✅ セット '{set_name}' を削除しました"
     
     def get_random_prompt(self, prompt_type, fallback_prompt):
-        """リストからランダムプロンプトを取得"""
+        """リストからランダムプロンプトを取得（統合プロンプトリスト対応）"""
+        print(f"[DEBUG] get_random_prompt called: type={prompt_type}, fallback='{fallback_prompt[:30]}...'")
+        
+        # 統合プロンプトリストの現在アクティブなセットから取得
+        active_set = self.get_active_prompt_set()
         use_list_key = f"use_list_{prompt_type}"
         list_key = f"prompt_{prompt_type}_list"
         
+        print(f"[DEBUG] Active prompt set: {self.settings.get('active_prompt_set', 'デフォルト')}")
+        print(f"[DEBUG] Use list setting ({use_list_key}): {active_set.get(use_list_key, False)}")
+        
         # リストを使用する設定かつ、リストが空でない場合
-        if (self.settings.get(use_list_key, False) and 
-            list_key in self.settings and 
-            self.settings[list_key]):
-            return random.choice(self.settings[list_key])
+        if (active_set.get(use_list_key, False) and 
+            list_key in active_set and 
+            active_set[list_key]):
+            selected_prompt = random.choice(active_set[list_key])
+            print(f"[DEBUG] Selected from list: '{selected_prompt[:30]}...'")
+            return selected_prompt
         else:
+            print(f"[DEBUG] Using fallback prompt: '{fallback_prompt[:30]}...'")
             return fallback_prompt
         
     def start_prompt_flow(self, url, prompt_a, prompt_b, prompt_c, use_fallback, fallback_message, retry_count, bc_loop_count):
