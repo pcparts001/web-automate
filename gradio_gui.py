@@ -1341,7 +1341,7 @@ def create_prompt_list_tab(gui, bc_loop_input=None):
         
         # Stage 9a + 11a: プロンプトセット切り替えイベントハンドラー（セット名自動入力機能追加）
         def switch_set_with_refresh(selected_set, bc_count):
-            """プロンプトセット切り替え + 全UI更新 + セット名自動入力"""
+            """プロンプトセット切り替え + 全UI更新 + セット名自動入力 + チェックボックス更新"""
             result = gui.switch_prompt_set(selected_set)
             
             # 切り替え後のUI更新
@@ -1350,22 +1350,21 @@ def create_prompt_list_tab(gui, bc_loop_input=None):
             new_list_b = gui.get_list_display("b")
             new_list_c = gui.get_list_display("c")
             
-            # セット切り替え後のチェックボックス状態をログ出力（参考情報）
+            # 新しいアクティブセットのチェックボックス状態を取得
             new_active_set = gui.get_active_prompt_set()
             new_use_list_a = new_active_set.get("use_list_a", False)
             new_use_list_b = new_active_set.get("use_list_b", False)
             new_use_list_c = new_active_set.get("use_list_c", False)
             
-            print(f"[INFO] セット切り替え完了 - チェックボックス状態: A={new_use_list_a}, B={new_use_list_b}, C={new_use_list_c}")
-            print(f"[INFO] メイン機能タブのチェックボックスは手動で設定してください")
+            print(f"[DEBUG] セット切り替え後のチェックボックス状態: A={new_use_list_a}, B={new_use_list_b}, C={new_use_list_c}")
             
             # Stage 11a: 選択したセット名を「新しいセット名」に自動入力
-            return result, selected_set, new_unified_display, new_list_a, new_list_b, new_list_c, selected_set
+            return result, selected_set, new_unified_display, new_list_a, new_list_b, new_list_c, selected_set, new_use_list_a, new_use_list_b, new_use_list_c
         
         set_selector.change(
             fn=switch_set_with_refresh,
             inputs=[set_selector, bc_loop_input],  # bc_loop_inputを一貫性のため含める
-            outputs=[create_set_result, current_set_display, unified_list_display, list_a_display, list_b_display, list_c_display, new_set_name]
+            outputs=[create_set_result, current_set_display, unified_list_display, list_a_display, list_b_display, list_c_display, new_set_name, use_list_a, use_list_b, use_list_c]
         )
         
         # Stage 9b: Dropdown選択肢の定期更新
