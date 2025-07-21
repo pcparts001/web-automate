@@ -1024,9 +1024,9 @@ def create_main_tab(gui):
                 use_list_b = gr.Checkbox(label="🅱️ リストを使用", value=active_set.get("use_list_b", False))
                 use_list_c = gr.Checkbox(label="🅾️ リストを使用", value=active_set.get("use_list_c", False))
             
-            prompt_a_input = gr.Textbox(label="🅰️ プロンプトA (初期プロンプト)", lines=3, placeholder="最初に送信するプロンプト...", value=gui.settings.get("prompt_a", ""))
-            prompt_b_input = gr.Textbox(label="🅱️ プロンプトB (追加情報要求)", lines=3, placeholder="追加情報の候補をリクエストするプロンプト...", value=gui.settings.get("prompt_b", ""))
-            prompt_c_input = gr.Textbox(label="🅾️ プロンプトC (候補承認)", lines=3, placeholder="提案された候補にOKするプロンプト...", value=gui.settings.get("prompt_c", ""))
+            prompt_a_input = gr.Textbox(label="🅰️ プロンプトA (初期プロンプト)", lines=3, placeholder="最初に送信するプロンプト...", value=gui.settings.get("prompt_a", "ダミーA"))
+            prompt_b_input = gr.Textbox(label="🅱️ プロンプトB (追加情報要求)", lines=3, placeholder="追加情報の候補をリクエストするプロンプト...", value=gui.settings.get("prompt_b", "ダミーB"))
+            prompt_c_input = gr.Textbox(label="🅾️ プロンプトC (候補承認)", lines=3, placeholder="提案された候補にOKするプロンプト...", value=gui.settings.get("prompt_c", "ダミーC"))
             
             # B->Cループ回数制御
             bc_loop_input = gr.Number(label="🔄 B→Cループ回数 (0=無限)", value=gui.settings.get("bc_loop_count", 0), minimum=0, maximum=1000)
