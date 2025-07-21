@@ -302,6 +302,17 @@ class AutomationGUI:
         
         return f"✅ プロンプトセット '{set_name}' を作成しました\n📋 A/B/Cリスト内容をコピー（合計{total_items}項目）"
     
+    def switch_prompt_set(self, set_name):
+        """プロンプトセットを切り替え"""
+        if not set_name or set_name not in self.settings.get("prompt_sets", {}):
+            return f"❌ セット '{set_name}' が見つかりません"
+        
+        # アクティブセットを変更
+        self.settings["active_prompt_set"] = set_name
+        self.save_settings()
+        
+        return f"✅ プロンプトセットを '{set_name}' に切り替えました"
+    
     def get_random_prompt(self, prompt_type, fallback_prompt):
         """リストからランダムプロンプトを取得"""
         use_list_key = f"use_list_{prompt_type}"
@@ -1078,6 +1089,25 @@ def create_prompt_list_tab(gui, bc_loop_input=None):
             inputs=[new_set_name, bc_loop_input],  # bc_loop_inputを一貫性のため含める
             outputs=[create_set_result, set_selector, current_set_display]
         ).then(fn=lambda: "", outputs=[new_set_name])
+        
+        # Stage 9a: プロンプトセット切り替えイベントハンドラー
+        def switch_set_with_refresh(selected_set, bc_count):
+            """プロンプトセット切り替え + 全UI更新"""
+            result = gui.switch_prompt_set(selected_set)
+            
+            # 切り替え後のUI更新
+            new_unified_display = gui.get_unified_list_display()
+            new_list_a = gui.get_list_display("a") 
+            new_list_b = gui.get_list_display("b")
+            new_list_c = gui.get_list_display("c")
+            
+            return result, selected_set, new_unified_display, new_list_a, new_list_b, new_list_c
+        
+        set_selector.change(
+            fn=switch_set_with_refresh,
+            inputs=[set_selector, bc_loop_input],  # bc_loop_inputを一貫性のため含める
+            outputs=[create_set_result, current_set_display, unified_list_display, list_a_display, list_b_display, list_c_display]
+        )
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
