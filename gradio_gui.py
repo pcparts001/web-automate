@@ -242,6 +242,40 @@ class AutomationGUI:
             self.settings["active_prompt_set"] = active_set_name
         return self.settings["prompt_sets"][active_set_name]
     
+    def create_prompt_set(self, set_name):
+        """新しいプロンプトセットを作成"""
+        if not set_name or not set_name.strip():
+            return "❌ セット名を入力してください"
+        
+        set_name = set_name.strip()
+        
+        if set_name in self.settings.get("prompt_sets", {}):
+            return f"⚠️ セット '{set_name}' は既に存在します"
+        
+        # 新しい空のセットを作成
+        new_set = {
+            "prompt_a": "",
+            "prompt_b": "",
+            "prompt_c": "",
+            "prompt_a_list": [],
+            "prompt_b_list": [],
+            "prompt_c_list": [],
+            "use_list_a": False,
+            "use_list_b": False,
+            "use_list_c": False
+        }
+        
+        # prompt_setsに新しいセットを追加
+        if "prompt_sets" not in self.settings:
+            self.settings["prompt_sets"] = {}
+        
+        self.settings["prompt_sets"][set_name] = new_set
+        
+        # 設定を保存
+        self.save_settings()
+        
+        return f"✅ プロンプトセット '{set_name}' を作成しました"
+    
     def get_random_prompt(self, prompt_type, fallback_prompt):
         """リストからランダムプロンプトを取得"""
         use_list_key = f"use_list_{prompt_type}"
@@ -821,6 +855,22 @@ def create_prompt_list_tab(gui):
                 label="セット選択",
                 scale=1
             )
+        
+        # Stage 7a: プロンプトセット作成機能
+        gr.Markdown("### ➕ 新しいプロンプトセット作成")
+        with gr.Row():
+            new_set_name = gr.Textbox(
+                label="新しいセット名",
+                placeholder="例: 日本の山、日本の湖...",
+                scale=3
+            )
+            create_set_btn = gr.Button("🆕 セット作成", scale=1)
+        
+        create_set_result = gr.Textbox(
+            label="作成結果",
+            interactive=False,
+            lines=2
+        )
         
         unified_list_display = gr.Textbox(
             label="A/B/C統合プロンプトリスト", 
