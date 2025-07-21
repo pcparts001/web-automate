@@ -422,12 +422,12 @@ python gradio_gui.py
 #### **Phase 2: get_random_prompt()メソッド修正**
 - [x] 統合プロンプトリスト対応版への更新（`self.settings`→`get_active_prompt_set()`）
 - [x] デバッグログ追加
-- [ ] 単体動作確認（GUI起動・基本動作テスト）
+- [x] 単体動作確認（GUI起動・基本動作テスト）
 
 #### **Phase 3: UI連携機能追加**
-- [ ] `update_use_list_setting()`メソッド実装
-- [ ] チェックボックスイベントハンドラー追加（⚠️ Gradio一貫性注意）
-- [ ] `bc_loop_input`参照の厳密な一貫性確保
+- [x] `update_use_list_setting()`メソッド実装
+- [x] チェックボックスイベントハンドラー追加（⚠️ Gradio一貫性注意）
+- [x] `bc_loop_input`参照の厳密な一貫性確保
 
 #### **Phase 4: 動作確認・デバッグ**
 - [ ] 各Phase完了時の段階的テスト

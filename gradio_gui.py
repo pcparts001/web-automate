@@ -195,6 +195,32 @@ class AutomationGUI:
             print(error_msg)
             return f"❌ {error_msg}"
     
+    def update_use_list_setting(self, prompt_type, use_list_value):
+        """統合プロンプトリストのuse_list設定を更新"""
+        print(f"[DEBUG] update_use_list_setting called: type={prompt_type}, value={use_list_value}")
+        
+        # アクティブなプロンプトセットのuse_list設定を更新
+        active_set_name = self.settings.get("active_prompt_set", "デフォルト")
+        use_list_key = f"use_list_{prompt_type}"
+        
+        if "prompt_sets" in self.settings and active_set_name in self.settings["prompt_sets"]:
+            self.settings["prompt_sets"][active_set_name][use_list_key] = use_list_value
+            
+            # 設定をファイルに保存
+            try:
+                with open(self.settings_file, 'w', encoding='utf-8') as f:
+                    json.dump(self.settings, f, ensure_ascii=False, indent=2)
+                print(f"[DEBUG] Updated {use_list_key} to {use_list_value} in set '{active_set_name}'")
+                return f"✅ {prompt_type.upper()}リスト使用設定を更新しました"
+            except Exception as e:
+                error_msg = f"設定更新エラー: {e}"
+                print(f"[ERROR] {error_msg}")
+                return f"❌ {error_msg}"
+        else:
+            error_msg = f"アクティブセット '{active_set_name}' が見つかりません"
+            print(f"[ERROR] {error_msg}")
+            return f"❌ {error_msg}"
+
     # Phase2: プロンプトリスト管理機能
     def add_to_list(self, prompt_type, new_prompt):
         """プロンプトをリストに追加"""
@@ -991,11 +1017,12 @@ def create_main_tab(gui):
             # Phase1: 複数プロンプト機能
             gr.Markdown("### 🔄 プロンプトフロー機能")
             
-            # Phase2: ランダム選択機能
+            # Phase2: ランダム選択機能（統合プロンプトリスト対応）
+            active_set = gui.get_active_prompt_set()
             with gr.Row():
-                use_list_a = gr.Checkbox(label="🅰️ リストを使用", value=gui.settings.get("use_list_a", False))
-                use_list_b = gr.Checkbox(label="🅱️ リストを使用", value=gui.settings.get("use_list_b", False))
-                use_list_c = gr.Checkbox(label="🅾️ リストを使用", value=gui.settings.get("use_list_c", False))
+                use_list_a = gr.Checkbox(label="🅰️ リストを使用", value=active_set.get("use_list_a", False))
+                use_list_b = gr.Checkbox(label="🅱️ リストを使用", value=active_set.get("use_list_b", False))
+                use_list_c = gr.Checkbox(label="🅾️ リストを使用", value=active_set.get("use_list_c", False))
             
             prompt_a_input = gr.Textbox(label="🅰️ プロンプトA (初期プロンプト)", lines=3, placeholder="最初に送信するプロンプト...", value=gui.settings.get("prompt_a", ""))
             prompt_b_input = gr.Textbox(label="🅱️ プロンプトB (追加情報要求)", lines=3, placeholder="追加情報の候補をリクエストするプロンプト...", value=gui.settings.get("prompt_b", ""))
@@ -1064,6 +1091,25 @@ def create_main_tab(gui):
     ).then(
         fn=lambda: gr.update(visible=True),
         outputs=[save_status]
+    )
+    
+    # Phase 3: チェックボックスイベントハンドラー（統合プロンプトリスト対応）
+    use_list_a.change(
+        fn=lambda value, bc_input: gui.update_use_list_setting("a", value),
+        inputs=[use_list_a, bc_loop_input],  # bc_loop_inputを一貫性のため含める
+        outputs=[]
+    )
+    
+    use_list_b.change(
+        fn=lambda value, bc_input: gui.update_use_list_setting("b", value),
+        inputs=[use_list_b, bc_loop_input],  # bc_loop_inputを一貫性のため含める
+        outputs=[]
+    )
+    
+    use_list_c.change(
+        fn=lambda value, bc_input: gui.update_use_list_setting("c", value),
+        inputs=[use_list_c, bc_loop_input],  # bc_loop_inputを一貫性のため含める
+        outputs=[]
     )
     
     return status_display, response_display, bc_loop_input
