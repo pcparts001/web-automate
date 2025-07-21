@@ -139,6 +139,33 @@ class AutomationGUI:
         
         return f"プロンプト{prompt_type.upper()}リスト ({len(self.settings[list_key])}件):\n" + "\n".join(items)
     
+    def get_unified_list_display(self):
+        """A/B/C統合リストの表示用文字列を取得（読み取り専用）"""
+        all_items = []
+        
+        # プロンプトA
+        list_a = self.settings.get("prompt_a_list", [])
+        for i, prompt in enumerate(list_a):
+            all_items.append(f"A-{i}: {prompt}")
+        
+        # プロンプトB
+        list_b = self.settings.get("prompt_b_list", [])
+        for i, prompt in enumerate(list_b):
+            all_items.append(f"B-{i}: {prompt}")
+        
+        # プロンプトC
+        list_c = self.settings.get("prompt_c_list", [])
+        for i, prompt in enumerate(list_c):
+            all_items.append(f"C-{i}: {prompt}")
+        
+        total_count = len(list_a) + len(list_b) + len(list_c)
+        
+        if not all_items:
+            return "📋 統合プロンプトリスト: (空)"
+        
+        header = f"📋 統合プロンプトリスト (合計 {total_count}件: A={len(list_a)}, B={len(list_b)}, C={len(list_c)}):"
+        return header + "\n" + "\n".join(all_items)
+    
     def get_random_prompt(self, prompt_type, fallback_prompt):
         """リストからランダムプロンプトを取得"""
         use_list_key = f"use_list_{prompt_type}"
@@ -698,6 +725,20 @@ def create_main_tab(gui):
 
 def create_prompt_list_tab(gui):
     """プロンプトリスト編集タブのコンポーネントを作成"""
+    
+    # 統合リスト表示セクション（Stage 1: 読み取り専用）
+    with gr.Column():
+        gr.Markdown("## 📋 統合プロンプトリスト (全体表示)")
+        unified_list_display = gr.Textbox(
+            label="A/B/C統合プロンプトリスト", 
+            lines=12, 
+            value=gui.get_unified_list_display(), 
+            interactive=False,
+            placeholder="A/B/Cすべてのプロンプトがここに表示されます..."
+        )
+    
+    gr.Markdown("---")  # セクション区切り
+    
     # プロンプトAリスト管理（独立）
     with gr.Column():
         gr.Markdown("### 🅰️ プロンプトAリスト管理")
@@ -758,61 +799,61 @@ def create_prompt_list_tab(gui):
         
         result_c = gr.Textbox(label="操作結果", interactive=False)
     
-    # プロンプトAのイベントハンドラー
+    # プロンプトAのイベントハンドラー（統合リスト更新対応）
     add_a_btn.click(
-        fn=lambda prompt: gui.add_to_list("a", prompt),
+        fn=lambda prompt: gui.add_to_list("a", prompt) + (gui.get_unified_list_display(),),
         inputs=[new_prompt_a],
-        outputs=[result_a, list_a_display]
+        outputs=[result_a, list_a_display, unified_list_display]
     ).then(fn=lambda: "", outputs=[new_prompt_a])
     
     edit_a_btn.click(
-        fn=lambda idx, content: gui.edit_list_item("a", idx, content),
+        fn=lambda idx, content: gui.edit_list_item("a", idx, content) + (gui.get_unified_list_display(),),
         inputs=[edit_index_a, edit_content_a],
-        outputs=[result_a, list_a_display]
+        outputs=[result_a, list_a_display, unified_list_display]
     ).then(fn=lambda: "", outputs=[edit_content_a])
     
     remove_a_btn.click(
-        fn=lambda idx: gui.remove_from_list("a", idx),
+        fn=lambda idx: gui.remove_from_list("a", idx) + (gui.get_unified_list_display(),),
         inputs=[remove_index_a],
-        outputs=[result_a, list_a_display]
+        outputs=[result_a, list_a_display, unified_list_display]
     )
     
-    # プロンプトBのイベントハンドラー
+    # プロンプトBのイベントハンドラー（統合リスト更新対応）
     add_b_btn.click(
-        fn=lambda prompt: gui.add_to_list("b", prompt),
+        fn=lambda prompt: gui.add_to_list("b", prompt) + (gui.get_unified_list_display(),),
         inputs=[new_prompt_b],
-        outputs=[result_b, list_b_display]
+        outputs=[result_b, list_b_display, unified_list_display]
     ).then(fn=lambda: "", outputs=[new_prompt_b])
     
     edit_b_btn.click(
-        fn=lambda idx, content: gui.edit_list_item("b", idx, content),
+        fn=lambda idx, content: gui.edit_list_item("b", idx, content) + (gui.get_unified_list_display(),),
         inputs=[edit_index_b, edit_content_b],
-        outputs=[result_b, list_b_display]
+        outputs=[result_b, list_b_display, unified_list_display]
     ).then(fn=lambda: "", outputs=[edit_content_b])
     
     remove_b_btn.click(
-        fn=lambda idx: gui.remove_from_list("b", idx),
+        fn=lambda idx: gui.remove_from_list("b", idx) + (gui.get_unified_list_display(),),
         inputs=[remove_index_b],
-        outputs=[result_b, list_b_display]
+        outputs=[result_b, list_b_display, unified_list_display]
     )
     
-    # プロンプトCのイベントハンドラー
+    # プロンプトCのイベントハンドラー（統合リスト更新対応）
     add_c_btn.click(
-        fn=lambda prompt: gui.add_to_list("c", prompt),
+        fn=lambda prompt: gui.add_to_list("c", prompt) + (gui.get_unified_list_display(),),
         inputs=[new_prompt_c],
-        outputs=[result_c, list_c_display]
+        outputs=[result_c, list_c_display, unified_list_display]
     ).then(fn=lambda: "", outputs=[new_prompt_c])
     
     edit_c_btn.click(
-        fn=lambda idx, content: gui.edit_list_item("c", idx, content),
+        fn=lambda idx, content: gui.edit_list_item("c", idx, content) + (gui.get_unified_list_display(),),
         inputs=[edit_index_c, edit_content_c],
-        outputs=[result_c, list_c_display]
+        outputs=[result_c, list_c_display, unified_list_display]
     ).then(fn=lambda: "", outputs=[edit_content_c])
     
     remove_c_btn.click(
-        fn=lambda idx: gui.remove_from_list("c", idx),
+        fn=lambda idx: gui.remove_from_list("c", idx) + (gui.get_unified_list_display(),),
         inputs=[remove_index_c],
-        outputs=[result_c, list_c_display]
+        outputs=[result_c, list_c_display, unified_list_display]
     )
 
 if __name__ == "__main__":

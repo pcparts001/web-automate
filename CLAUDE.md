@@ -157,6 +157,12 @@ AI chat applications（特にGenspark.ai）向けのChrome自動操作ツール�
     - GUI側でファイル保存制御、重複保存を防止
     - タイムアウト値を正式に300秒に統一
 
+12. **Gradio Numberコンポーネント参照不整合エラーの修正（2025-07-21）**
+    - `ValueError: An event handler didn't receive enough input values` エラーを解決
+    - `flow_stop_btn`に`bc_loop_input`をダミーinputとして追加
+    - 同一コンテキスト内でのNumberコンポーネント参照一貫性を確保
+    - プロンプト停止機能（Chrome保持）の完全実装が完了
+
 ### 📁 ファイル構成
 ```
 web-automate/
@@ -276,6 +282,23 @@ python gradio_gui.py
 - Queue ベースのステータス・応答管理
 - Chrome持続性によるセッション維持
 - 詳細な進捗表示とエラーハンドリング
+
+#### 5. Gradio Numberコンポーネントのイベントハンドラー不整合エラー（2025-07-21）
+**課題**: `ValueError: An event handler didn't receive enough input values (needed: 1, got: 0)`
+**根本原因**:
+- 同じコンテキスト内でNumberコンポーネント（例：`bc_loop_input`）を参照するイベントハンドラーと参照しないイベントハンドラーが混在
+- Gradio内部でのコンポーネントインデックス管理に不整合が発生
+- 特に複数のNumberコンポーネントがある環境（プロンプトリスト編集タブ等）で発生しやすい
+
+**解決**:
+- **一貫性の原則**: 同一コンテキスト内の全イベントハンドラーでNumberコンポーネント参照を統一
+- ダミーinputの追加: `inputs=[bc_loop_input]` でコンポーネント参照を一致させる
+- 例: `flow_stop_btn.click(fn=lambda bc_count: gui.stop_automation(), inputs=[bc_loop_input], outputs=[...])`
+
+**予防策**:
+- Numberコンポーネントを含むエリアでボタンを追加する際は必ずNumberコンポーネントをinputsに含める
+- レイアウト変更時はコンポーネント参照順序に注意
+- 段階的実装でエラー箇所を特定する
 
 ### ⚙️ 設定・環境
 - **対象サイト**: Genspark.ai (`https://www.genspark.ai/agents?type=moa_chat`)
