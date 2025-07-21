@@ -528,6 +528,17 @@ class AutomationGUI:
             logging.info("=" * 60)
             self.status_queue.put("プロンプト処理完了（Chrome維持中）")
     
+    def stop_prompt_only(self):
+        """プロンプトのみ停止（Chrome維持）"""
+        if not self.is_running:
+            return "待機中です", "待機中"
+            
+        self.is_running = False
+        self.current_prompt_type = None
+        self.current_bc_cycle = 0
+                
+        return "⏸️ プロンプト処理を停止しました（Chrome維持中）", "待機中"
+    
     def stop_automation(self):
         """自動化を停止（Chromeも終了）"""
         if not self.is_running and not self.chrome_initialized:
