@@ -252,17 +252,20 @@ class AutomationGUI:
         if set_name in self.settings.get("prompt_sets", {}):
             return f"⚠️ セット '{set_name}' は既に存在します"
         
-        # 新しい空のセットを作成
+        # 現在のアクティブセットの内容を取得してコピー
+        active_set = self.get_active_prompt_set()
+        
+        # 新しいセットを現在の内容で初期化
         new_set = {
-            "prompt_a": "",
-            "prompt_b": "",
-            "prompt_c": "",
-            "prompt_a_list": [],
-            "prompt_b_list": [],
-            "prompt_c_list": [],
-            "use_list_a": False,
-            "use_list_b": False,
-            "use_list_c": False
+            "prompt_a": active_set.get("prompt_a", ""),
+            "prompt_b": active_set.get("prompt_b", ""),
+            "prompt_c": active_set.get("prompt_c", ""),
+            "prompt_a_list": active_set.get("prompt_a_list", []).copy(),
+            "prompt_b_list": active_set.get("prompt_b_list", []).copy(),
+            "prompt_c_list": active_set.get("prompt_c_list", []).copy(),
+            "use_list_a": active_set.get("use_list_a", False),
+            "use_list_b": active_set.get("use_list_b", False),
+            "use_list_c": active_set.get("use_list_c", False)
         }
         
         # prompt_setsに新しいセットを追加
@@ -274,7 +277,12 @@ class AutomationGUI:
         # 設定を保存
         self.save_settings()
         
-        return f"✅ プロンプトセット '{set_name}' を作成しました"
+        # コピーされた内容の統計
+        total_items = (len(new_set["prompt_a_list"]) + 
+                      len(new_set["prompt_b_list"]) + 
+                      len(new_set["prompt_c_list"]))
+        
+        return f"✅ プロンプトセット '{set_name}' を作成しました\n📋 A/B/Cリスト内容をコピー（合計{total_items}項目）"
     
     def get_random_prompt(self, prompt_type, fallback_prompt):
         """リストからランダムプロンプトを取得"""
