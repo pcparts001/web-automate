@@ -721,27 +721,25 @@ def create_prompt_list_tab(gui):
         
         result_b = gr.Textbox(label="操作結果", interactive=False)
     
-    # プロンプトCリスト管理（横並び内に維持）
-    with gr.Row():
-        # プロンプトCリスト管理
-        with gr.Column():
-            gr.Markdown("### 🅾️ プロンプトCリスト管理")
-            list_c_display = gr.Textbox(label="プロンプトCリスト", lines=8, value=gui.get_list_display("c"), interactive=False)
-            
-            with gr.Row():
-                new_prompt_c = gr.Textbox(label="新しいプロンプトC", placeholder="追加するプロンプト...", scale=3)
-                add_c_btn = gr.Button("➕ 追加", scale=1)
-            
-            with gr.Row():
-                edit_index_c = gr.Number(label="編集インデックス", value=0, minimum=0, scale=1)
-                edit_content_c = gr.Textbox(label="新しい内容", placeholder="編集後の内容...", scale=2)
-                edit_c_btn = gr.Button("✏️ 編集", scale=1)
-            
-            with gr.Row():
-                remove_index_c = gr.Number(label="削除インデックス", value=0, minimum=0, scale=2)
-                remove_c_btn = gr.Button("🗑️ 削除", scale=1)
-            
-            result_c = gr.Textbox(label="操作結果", interactive=False)
+    # プロンプトCリスト管理（独立）
+    with gr.Column():
+        gr.Markdown("### 🅾️ プロンプトCリスト管理")
+        list_c_display = gr.Textbox(label="プロンプトCリスト", lines=8, value=gui.get_list_display("c"), interactive=False)
+        
+        with gr.Row():
+            new_prompt_c = gr.Textbox(label="新しいプロンプトC", placeholder="追加するプロンプト...", scale=3)
+            add_c_btn = gr.Button("➕ 追加", scale=1)
+        
+        with gr.Row():
+            edit_index_c = gr.Number(label="編集インデックス", value=0, minimum=0, scale=1)
+            edit_content_c = gr.Textbox(label="新しい内容", placeholder="編集後の内容...", scale=2)
+            edit_c_btn = gr.Button("✏️ 編集", scale=1)
+        
+        with gr.Row():
+            remove_index_c = gr.Number(label="削除インデックス", value=0, minimum=0, scale=2)
+            remove_c_btn = gr.Button("🗑️ 削除", scale=1)
+        
+        result_c = gr.Textbox(label="操作結果", interactive=False)
     
     # プロンプトAのイベントハンドラー
     add_a_btn.click(
