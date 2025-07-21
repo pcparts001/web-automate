@@ -33,20 +33,104 @@ class AutomationGUI:
         self.settings = self.load_settings()
     
     def load_settings(self):
-        """設定ファイルから設定をロード"""
+        """設定ファイルから設定をロード（古い構造からの自動移行対応）"""
         try:
             if os.path.exists(self.settings_file):
                 with open(self.settings_file, 'r', encoding='utf-8') as f:
                     settings = json.load(f)
                     print(f"設定ファイルをロードしました: {self.settings_file}")
+                    
+                    # 古い構造から新構造への移行チェック
+                    if "prompt_sets" not in settings:
+                        print("古い設定構造を検出。新構造に移行中...")
+                        settings = self._migrate_old_settings(settings)
+                        
                     return settings
         except Exception as e:
             print(f"設定ファイルの読み込みエラー: {e}")
         
-        # デフォルト設定
+        # デフォルト設定（新構造）
+        return self._get_default_settings()
+    
+    def _get_default_settings(self):
+        """新構造のデフォルト設定を取得"""
         return {
             "fallback_message": "",
             "url": "https://www.genspark.ai/agents?type=moa_chat",
+            "bc_loop_count": 0,
+            "prompt_sets": {
+                "デフォルト": {
+                    "prompt_a": "",
+                    "prompt_b": "",
+                    "prompt_c": "",
+                    "prompt_a_list": [],
+                    "prompt_b_list": [],
+                    "prompt_c_list": [],
+                    "use_list_a": False,
+                    "use_list_b": False,
+                    "use_list_c": False
+                }
+            },
+            "active_prompt_set": "デフォルト"
+        }
+    
+    def _migrate_old_settings(self, old_settings):
+        """古い設定構造から新構造への移行"""
+        print("設定構造を移行中...")
+        
+        # 新構造のベースを作成
+        new_settings = self._get_default_settings()
+        
+        # 共通設定を移行
+        new_settings["fallback_message"] = old_settings.get("fallback_message", "")
+        new_settings["url"] = old_settings.get("url", "https://www.genspark.ai/agents?type=moa_chat")
+        new_settings["bc_loop_count"] = old_settings.get("bc_loop_count", 0)
+        
+        # プロンプト関連を「デフォルト」セットに移行
+        default_set = new_settings["prompt_sets"]["デフォルト"]
+        default_set["prompt_a"] = old_settings.get("prompt_a", "")
+        default_set["prompt_b"] = old_settings.get("prompt_b", "")
+        default_set["prompt_c"] = old_settings.get("prompt_c", "")
+        default_set["prompt_a_list"] = old_settings.get("prompt_a_list", [])
+        default_set["prompt_b_list"] = old_settings.get("prompt_b_list", [])
+        default_set["prompt_c_list"] = old_settings.get("prompt_c_list", [])
+        default_set["use_list_a"] = old_settings.get("use_list_a", False)
+        default_set["use_list_b"] = old_settings.get("use_list_b", False)
+        default_set["use_list_c"] = old_settings.get("use_list_c", False)
+        
+        # 移行完了後、新構造で保存
+        try:
+            with open(self.settings_file, 'w', encoding='utf-8') as f:
+                json.dump(new_settings, f, ensure_ascii=False, indent=2)
+            print(f"✅ 設定構造の移行が完了しました: {self.settings_file}")
+        except Exception as e:
+            print(f"❌ 移行後の設定保存エラー: {e}")
+        
+        return new_settings
+    
+    def get_active_prompt_set(self):
+        """アクティブなプロンプトセットを取得"""
+        active_set_name = self.settings.get("active_prompt_set", "デフォルト")
+        if active_set_name not in self.settings.get("prompt_sets", {}):
+            # アクティブセットが存在しない場合、デフォルトにフォールバック
+            active_set_name = "デフォルト"
+            self.settings["active_prompt_set"] = active_set_name
+        return self.settings["prompt_sets"][active_set_name]
+    
+    def get_prompt_set_names(self):
+        """利用可能なプロンプトセット名のリストを取得"""
+        return list(self.settings.get("prompt_sets", {}).keys())
+    
+    def create_prompt_set(self, set_name):
+        """新しいプロンプトセットを作成"""
+        if "prompt_sets" not in self.settings:
+            self.settings["prompt_sets"] = {}
+        
+        if set_name in self.settings["prompt_sets"]:
+            return f"❌ プロンプトセット '{set_name}' は既に存在します"
+        
+        # 新しいセットを作成（空の状態）
+        self.settings["prompt_sets"][set_name] = {
             "prompt_a": "",
             "prompt_b": "",
             "prompt_c": "",
@@ -55,9 +139,21 @@ class AutomationGUI:
             "prompt_c_list": [],
             "use_list_a": False,
             "use_list_b": False,
-            "use_list_c": False,
-            "bc_loop_count": 0
+            "use_list_c": False
         }
+        
+        # 設定を保存
+        self.save_settings()
+        return f"✅ プロンプトセット '{set_name}' を作成しました"
+    
+    def switch_prompt_set(self, set_name):
+        """アクティブなプロンプトセットを切り替え"""
+        if set_name not in self.settings.get("prompt_sets", {}):
+            return f"❌ プロンプトセット '{set_name}' が見つかりません"
+        
+        self.settings["active_prompt_set"] = set_name
+        self.save_settings()
+        return f"✅ プロンプトセットを '{set_name}' に切り替えました"
     
     def save_settings(self, **kwargs):
         """設定をファイルに保存"""
@@ -76,94 +172,110 @@ class AutomationGUI:
     
     # Phase2: プロンプトリスト管理機能
     def add_to_list(self, prompt_type, new_prompt):
-        """プロンプトをリストに追加"""
+        """プロンプトをリストに追加（アクティブなプロンプトセット内）"""
         if not new_prompt.strip():
             return f"❌ プロンプトが空です", self.get_list_display(prompt_type)
             
+        active_set = self.get_active_prompt_set()
         list_key = f"prompt_{prompt_type}_list"
-        if list_key not in self.settings:
-            self.settings[list_key] = []
-            
-        self.settings[list_key].append(new_prompt.strip())
-        self.save_settings(**{list_key: self.settings[list_key]})
         
-        return f"✅ プロンプト{prompt_type.upper()}リストに追加しました", self.get_list_display(prompt_type)
+        if list_key not in active_set:
+            active_set[list_key] = []
+            
+        active_set[list_key].append(new_prompt.strip())
+        self.save_settings()
+        
+        active_set_name = self.settings["active_prompt_set"]
+        return f"✅ プロンプト{prompt_type.upper()}リスト[{active_set_name}]に追加しました", self.get_list_display(prompt_type)
     
     def remove_from_list(self, prompt_type, index):
-        """プロンプトをリストから削除"""
+        """プロンプトをリストから削除（アクティブなプロンプトセット内）"""
+        active_set = self.get_active_prompt_set()
         list_key = f"prompt_{prompt_type}_list"
-        if list_key not in self.settings or not self.settings[list_key]:
-            return f"❌ プロンプト{prompt_type.upper()}リストが空です", self.get_list_display(prompt_type)
+        
+        if list_key not in active_set or not active_set[list_key]:
+            active_set_name = self.settings["active_prompt_set"]
+            return f"❌ プロンプト{prompt_type.upper()}リスト[{active_set_name}]が空です", self.get_list_display(prompt_type)
             
         try:
             index = int(index)
-            if 0 <= index < len(self.settings[list_key]):
-                removed = self.settings[list_key].pop(index)
-                self.save_settings(**{list_key: self.settings[list_key]})
-                return f"✅ 削除しました: {removed[:50]}...", self.get_list_display(prompt_type)
+            if 0 <= index < len(active_set[list_key]):
+                removed = active_set[list_key].pop(index)
+                self.save_settings()
+                active_set_name = self.settings["active_prompt_set"]
+                return f"✅ 削除しました[{active_set_name}]: {removed[:50]}...", self.get_list_display(prompt_type)
             else:
                 return f"❌ インデックス {index} が範囲外です", self.get_list_display(prompt_type)
         except ValueError:
             return f"❌ 無効なインデックスです: {index}", self.get_list_display(prompt_type)
     
     def edit_list_item(self, prompt_type, index, new_content):
-        """リスト項目を編集"""
+        """リスト項目を編集（アクティブなプロンプトセット内）"""
+        active_set = self.get_active_prompt_set()
         list_key = f"prompt_{prompt_type}_list"
-        if list_key not in self.settings or not self.settings[list_key]:
-            return f"❌ プロンプト{prompt_type.upper()}リストが空です", self.get_list_display(prompt_type)
+        
+        if list_key not in active_set or not active_set[list_key]:
+            active_set_name = self.settings["active_prompt_set"]
+            return f"❌ プロンプト{prompt_type.upper()}リスト[{active_set_name}]が空です", self.get_list_display(prompt_type)
             
         if not new_content.strip():
             return f"❌ 新しいプロンプトが空です", self.get_list_display(prompt_type)
             
         try:
             index = int(index)
-            if 0 <= index < len(self.settings[list_key]):
-                old_content = self.settings[list_key][index]
-                self.settings[list_key][index] = new_content.strip()
-                self.save_settings(**{list_key: self.settings[list_key]})
-                return f"✅ 編集しました: {old_content[:30]}... → {new_content[:30]}...", self.get_list_display(prompt_type)
+            if 0 <= index < len(active_set[list_key]):
+                old_content = active_set[list_key][index]
+                active_set[list_key][index] = new_content.strip()
+                self.save_settings()
+                active_set_name = self.settings["active_prompt_set"]
+                return f"✅ 編集しました[{active_set_name}]: {old_content[:30]}... → {new_content[:30]}...", self.get_list_display(prompt_type)
             else:
                 return f"❌ インデックス {index} が範囲外です", self.get_list_display(prompt_type)
         except ValueError:
             return f"❌ 無効なインデックスです: {index}", self.get_list_display(prompt_type)
     
     def get_list_display(self, prompt_type):
-        """リストの表示用文字列を取得"""
+        """リストの表示用文字列を取得（アクティブなプロンプトセット内）"""
+        active_set = self.get_active_prompt_set()
+        active_set_name = self.settings["active_prompt_set"]
         list_key = f"prompt_{prompt_type}_list"
-        if list_key not in self.settings or not self.settings[list_key]:
-            return f"プロンプト{prompt_type.upper()}リスト: (空)"
+        
+        if list_key not in active_set or not active_set[list_key]:
+            return f"プロンプト{prompt_type.upper()}リスト[{active_set_name}]: (空)"
         
         items = []
-        for i, prompt in enumerate(self.settings[list_key]):
+        for i, prompt in enumerate(active_set[list_key]):
             items.append(f"{i}: {prompt}")
         
-        return f"プロンプト{prompt_type.upper()}リスト ({len(self.settings[list_key])}件):\n" + "\n".join(items)
+        return f"プロンプト{prompt_type.upper()}リスト[{active_set_name}] ({len(active_set[list_key])}件):\n" + "\n".join(items)
     
     def get_unified_list_display(self):
-        """A/B/C統合リストの表示用文字列を取得（読み取り専用）"""
+        """A/B/C統合リストの表示用文字列を取得（アクティブなプロンプトセット内）"""
+        active_set = self.get_active_prompt_set()
+        active_set_name = self.settings["active_prompt_set"]
         all_items = []
         
         # プロンプトA
-        list_a = self.settings.get("prompt_a_list", [])
+        list_a = active_set.get("prompt_a_list", [])
         for i, prompt in enumerate(list_a):
             all_items.append(f"A-{i}: {prompt}")
         
         # プロンプトB
-        list_b = self.settings.get("prompt_b_list", [])
+        list_b = active_set.get("prompt_b_list", [])
         for i, prompt in enumerate(list_b):
             all_items.append(f"B-{i}: {prompt}")
         
         # プロンプトC
-        list_c = self.settings.get("prompt_c_list", [])
+        list_c = active_set.get("prompt_c_list", [])
         for i, prompt in enumerate(list_c):
             all_items.append(f"C-{i}: {prompt}")
         
         total_count = len(list_a) + len(list_b) + len(list_c)
         
         if not all_items:
-            return "📋 統合プロンプトリスト: (空)"
+            return f"📋 統合プロンプトリスト[{active_set_name}]: (空)"
         
-        header = f"📋 統合プロンプトリスト (合計 {total_count}件: A={len(list_a)}, B={len(list_b)}, C={len(list_c)}):"
+        header = f"📋 統合プロンプトリスト[{active_set_name}] (合計 {total_count}件: A={len(list_a)}, B={len(list_b)}, C={len(list_c)}):"
         return header + "\n" + "\n".join(all_items)
     
     def add_to_unified_list(self, category, new_prompt):
@@ -180,15 +292,16 @@ class AutomationGUI:
         return result_msg, self.get_unified_list_display()
     
     def get_random_prompt(self, prompt_type, fallback_prompt):
-        """リストからランダムプロンプトを取得"""
+        """リストからランダムプロンプトを取得（アクティブなプロンプトセット内）"""
+        active_set = self.get_active_prompt_set()
         use_list_key = f"use_list_{prompt_type}"
         list_key = f"prompt_{prompt_type}_list"
         
         # リストを使用する設定かつ、リストが空でない場合
-        if (self.settings.get(use_list_key, False) and 
-            list_key in self.settings and 
-            self.settings[list_key]):
-            return random.choice(self.settings[list_key])
+        if (active_set.get(use_list_key, False) and 
+            list_key in active_set and 
+            active_set[list_key]):
+            return random.choice(active_set[list_key])
         else:
             return fallback_prompt
         
@@ -739,9 +852,37 @@ def create_main_tab(gui):
 def create_prompt_list_tab(gui):
     """プロンプトリスト編集タブのコンポーネントを作成"""
     
-    # 統合リスト表示セクション（Stage 1-2: 表示+追加機能）
+    # 統合リスト表示セクション（Stage 1-2: 表示+追加機能+セット管理）
     with gr.Column():
         gr.Markdown("## 📋 統合プロンプトリスト (全体表示)")
+        
+        # プロンプトセット管理セクション
+        gr.Markdown("### 🎯 プロンプトセット管理")
+        with gr.Row():
+            current_set_display = gr.Textbox(
+                label="現在のセット", 
+                value=gui.settings.get("active_prompt_set", "デフォルト"),
+                interactive=False,
+                scale=2
+            )
+            set_selector = gr.Dropdown(
+                choices=gui.get_prompt_set_names(),
+                value=gui.settings.get("active_prompt_set", "デフォルト"),
+                label="セット選択",
+                scale=2
+            )
+            switch_set_btn = gr.Button("🔄 切り替え", variant="primary", scale=1)
+        
+        with gr.Row():
+            new_set_name = gr.Textbox(
+                label="新しいセット名", 
+                placeholder="例: 日本の山、プログラミング、料理...",
+                scale=3
+            )
+            create_set_btn = gr.Button("➕ セット作成", variant="secondary", scale=1)
+        
+        set_operation_result = gr.Textbox(label="セット操作結果", interactive=False)
+        
         unified_list_display = gr.Textbox(
             label="A/B/C統合プロンプトリスト", 
             lines=12, 
@@ -904,6 +1045,41 @@ def create_prompt_list_tab(gui):
         inputs=[unified_category, unified_new_prompt],
         outputs=[unified_result, unified_list_display, list_a_display, list_b_display, list_c_display]
     ).then(fn=lambda: "", outputs=[unified_new_prompt])
+    
+    # プロンプトセット管理のイベントハンドラー
+    def switch_prompt_set_with_updates(set_name):
+        """プロンプトセット切り替え + 全表示更新"""
+        result_msg = gui.switch_prompt_set(set_name)
+        
+        # 全表示を更新
+        unified_display = gui.get_unified_list_display()
+        list_a_new = gui.get_list_display("a")
+        list_b_new = gui.get_list_display("b")
+        list_c_new = gui.get_list_display("c")
+        current_set = gui.settings["active_prompt_set"]
+        
+        return result_msg, current_set, unified_display, list_a_new, list_b_new, list_c_new
+    
+    def create_prompt_set_with_updates(set_name):
+        """プロンプトセット作成 + Dropdown更新"""
+        result_msg = gui.create_prompt_set(set_name)
+        
+        # Dropdown選択肢を更新
+        updated_choices = gui.get_prompt_set_names()
+        
+        return result_msg, gr.update(choices=updated_choices)
+    
+    switch_set_btn.click(
+        fn=switch_prompt_set_with_updates,
+        inputs=[set_selector],
+        outputs=[set_operation_result, current_set_display, unified_list_display, list_a_display, list_b_display, list_c_display]
+    )
+    
+    create_set_btn.click(
+        fn=create_prompt_set_with_updates,
+        inputs=[new_set_name],
+        outputs=[set_operation_result, set_selector]
+    ).then(fn=lambda: "", outputs=[new_set_name])
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
