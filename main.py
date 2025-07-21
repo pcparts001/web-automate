@@ -1122,7 +1122,16 @@ class ChromeAutomationTool:
                     cleaned_text = cleaned_text[:pattern_index].strip()
                     self.logger.debug(f"不要なパターン「{pattern}」を除去")
         
-        return cleaned_text.strip()
+        # 改行が検出されたら同じ場所にもう一つ改行を追加
+        cleaned_text = cleaned_text.strip()
+        if '\n' in cleaned_text:
+            # 単一改行を二重改行に変換（ただし、既に二重改行の部分は変更しない）
+            cleaned_text = cleaned_text.replace('\n\n', '\n__DOUBLE_NEWLINE__')  # 既存の二重改行を一時的に保護
+            cleaned_text = cleaned_text.replace('\n', '\n\n')  # 単一改行を二重改行に
+            cleaned_text = cleaned_text.replace('\n__DOUBLE_NEWLINE__', '\n\n')  # 保護した二重改行を復元
+            self.logger.debug("改行を二重改行に変換しました")
+        
+        return cleaned_text
 
     def count_existing_responses(self):
         """既存の応答要素数をカウント"""
