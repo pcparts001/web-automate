@@ -1069,15 +1069,16 @@ def create_prompt_list_tab(gui):
         
         return result_msg, gr.update(choices=updated_choices)
     
+    # Numberコンポーネント参照一貫性のため、既存のNumberコンポーネントをダミーinputに追加
     switch_set_btn.click(
-        fn=switch_prompt_set_with_updates,
-        inputs=[set_selector],
+        fn=lambda selector, idx_a, idx_b, idx_c, ridx_a, ridx_b, ridx_c: switch_prompt_set_with_updates(selector),
+        inputs=[set_selector, edit_index_a, edit_index_b, edit_index_c, remove_index_a, remove_index_b, remove_index_c],
         outputs=[set_operation_result, current_set_display, unified_list_display, list_a_display, list_b_display, list_c_display]
     )
     
     create_set_btn.click(
-        fn=create_prompt_set_with_updates,
-        inputs=[new_set_name],
+        fn=lambda name, idx_a, idx_b, idx_c, ridx_a, ridx_b, ridx_c: create_prompt_set_with_updates(name),
+        inputs=[new_set_name, edit_index_a, edit_index_b, edit_index_c, remove_index_a, remove_index_b, remove_index_c],
         outputs=[set_operation_result, set_selector]
     ).then(fn=lambda: "", outputs=[new_set_name])
 
