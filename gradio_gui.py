@@ -1053,7 +1053,7 @@ def create_prompt_list_tab(gui, bc_loop_input=None):
             new_choices = gui.get_prompt_set_names()
             new_current_display = gui.settings.get("active_prompt_set", "デフォルト")
             
-            return result, gr.Dropdown.update(choices=new_choices), new_current_display
+            return result, gr.update(choices=new_choices), new_current_display
         
         create_set_btn.click(
             fn=create_set_with_refresh,
