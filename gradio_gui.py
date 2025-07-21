@@ -502,49 +502,17 @@ class AutomationGUI:
             return f"✅ セット '{set_name}' を削除しました"
     
     def get_random_prompt(self, prompt_type, fallback_prompt):
-        """統合プロンプトリストのアクティブセットからランダムプロンプトを取得"""
-        try:
-            # アクティブなプロンプトセットを取得
-            active_set = self.get_active_prompt_set()
-            use_list_key = f"use_list_{prompt_type}"
-            list_key = f"prompt_{prompt_type}_list"
-            
-            print(f"[DEBUG] get_random_prompt({prompt_type}): アクティブセット='{self.settings.get('active_prompt_set', 'unknown')}'")
-            print(f"[DEBUG] use_list_{prompt_type}={active_set.get(use_list_key, False)}")
-            print(f"[DEBUG] {list_key}の項目数={len(active_set.get(list_key, []))}")
-            
-            # リストを使用する設定かつ、リストが空でない場合
-            if (active_set.get(use_list_key, False) and 
-                list_key in active_set and 
-                active_set[list_key]):
-                selected_prompt = random.choice(active_set[list_key])
-                print(f"[DEBUG] ランダム選択プロンプト{prompt_type.upper()}: '{selected_prompt[:50]}...'")
-                return selected_prompt
-            else:
-                print(f"[DEBUG] フォールバックプロンプト{prompt_type.upper()}使用: '{fallback_prompt[:50]}...'")
-                return fallback_prompt
-                
-        except Exception as e:
-            print(f"[ERROR] get_random_prompt エラー: {e}")
+        """リストからランダムプロンプトを取得"""
+        use_list_key = f"use_list_{prompt_type}"
+        list_key = f"prompt_{prompt_type}_list"
+        
+        # リストを使用する設定かつ、リストが空でない場合
+        if (self.settings.get(use_list_key, False) and 
+            list_key in self.settings and 
+            self.settings[list_key]):
+            return random.choice(self.settings[list_key])
+        else:
             return fallback_prompt
-    
-    def update_use_list_setting(self, prompt_type, use_list_value):
-        """アクティブセットのuse_list設定を更新"""
-        try:
-            active_set = self.get_active_prompt_set()
-            use_list_key = f"use_list_{prompt_type}"
-            
-            print(f"[DEBUG] update_use_list_setting: {prompt_type}={use_list_value}")
-            print(f"[DEBUG] アクティブセット: {self.settings.get('active_prompt_set', 'unknown')}")
-            
-            active_set[use_list_key] = use_list_value
-            self.save_settings()
-            
-            return f"✅ プロンプト{prompt_type.upper()}のリスト使用を {'ON' if use_list_value else 'OFF'} にしました"
-        except Exception as e:
-            error_msg = f"❌ 設定更新エラー: {e}"
-            print(f"[ERROR] update_use_list_setting: {error_msg}")
-            return error_msg
         
     def start_prompt_flow(self, url, prompt_a, prompt_b, prompt_c, use_fallback, fallback_message, retry_count, bc_loop_count):
         """プロンプトフロー自動化を開始"""
@@ -1013,12 +981,11 @@ def create_main_tab(gui):
             # Phase1: 複数プロンプト機能
             gr.Markdown("### 🔄 プロンプトフロー機能")
             
-            # Phase2: ランダム選択機能（統合プロンプトリスト対応）
+            # Phase2: ランダム選択機能
             with gr.Row():
-                active_set = gui.get_active_prompt_set()
-                use_list_a = gr.Checkbox(label="🅰️ リストを使用", value=active_set.get("use_list_a", False))
-                use_list_b = gr.Checkbox(label="🅱️ リストを使用", value=active_set.get("use_list_b", False))
-                use_list_c = gr.Checkbox(label="🅾️ リストを使用", value=active_set.get("use_list_c", False))
+                use_list_a = gr.Checkbox(label="🅰️ リストを使用", value=gui.settings.get("use_list_a", False))
+                use_list_b = gr.Checkbox(label="🅱️ リストを使用", value=gui.settings.get("use_list_b", False))
+                use_list_c = gr.Checkbox(label="🅾️ リストを使用", value=gui.settings.get("use_list_c", False))
             
             prompt_a_input = gr.Textbox(label="🅰️ プロンプトA (初期プロンプト)", lines=3, placeholder="最初に送信するプロンプト...", value=gui.settings.get("prompt_a", ""))
             prompt_b_input = gr.Textbox(label="🅱️ プロンプトB (追加情報要求)", lines=3, placeholder="追加情報の候補をリクエストするプロンプト...", value=gui.settings.get("prompt_b", ""))
@@ -1055,23 +1022,6 @@ def create_main_tab(gui):
     
     prompt_stop_btn.click(fn=gui.stop_prompt_only, outputs=[status_display, status_display])
     stop_btn.click(fn=gui.stop_automation, outputs=[status_display, status_display])
-    
-    # チェックボックスのイベントハンドラー（統合プロンプトリスト対応）
-    use_list_a.change(
-        fn=lambda value: gui.update_use_list_setting("a", value),
-        inputs=[use_list_a],
-        outputs=[]
-    )
-    use_list_b.change(
-        fn=lambda value: gui.update_use_list_setting("b", value),
-        inputs=[use_list_b],
-        outputs=[]
-    )
-    use_list_c.change(
-        fn=lambda value: gui.update_use_list_setting("c", value),
-        inputs=[use_list_c],
-        outputs=[]
-    )
     
     # プロンプトフローボタンのイベント
     prompt_flow_btn.click(
@@ -1341,7 +1291,7 @@ def create_prompt_list_tab(gui, bc_loop_input=None):
         
         # Stage 9a + 11a: プロンプトセット切り替えイベントハンドラー（セット名自動入力機能追加）
         def switch_set_with_refresh(selected_set, bc_count):
-            """プロンプトセット切り替え + 全UI更新 + セット名自動入力 + チェックボックス更新"""
+            """プロンプトセット切り替え + 全UI更新 + セット名自動入力"""
             result = gui.switch_prompt_set(selected_set)
             
             # 切り替え後のUI更新
@@ -1350,21 +1300,13 @@ def create_prompt_list_tab(gui, bc_loop_input=None):
             new_list_b = gui.get_list_display("b")
             new_list_c = gui.get_list_display("c")
             
-            # 新しいアクティブセットのチェックボックス状態を取得
-            new_active_set = gui.get_active_prompt_set()
-            new_use_list_a = new_active_set.get("use_list_a", False)
-            new_use_list_b = new_active_set.get("use_list_b", False)
-            new_use_list_c = new_active_set.get("use_list_c", False)
-            
-            print(f"[DEBUG] セット切り替え後のチェックボックス状態: A={new_use_list_a}, B={new_use_list_b}, C={new_use_list_c}")
-            
             # Stage 11a: 選択したセット名を「新しいセット名」に自動入力
-            return result, selected_set, new_unified_display, new_list_a, new_list_b, new_list_c, selected_set, new_use_list_a, new_use_list_b, new_use_list_c
+            return result, selected_set, new_unified_display, new_list_a, new_list_b, new_list_c, selected_set
         
         set_selector.change(
             fn=switch_set_with_refresh,
             inputs=[set_selector, bc_loop_input],  # bc_loop_inputを一貫性のため含める
-            outputs=[create_set_result, current_set_display, unified_list_display, list_a_display, list_b_display, list_c_display, new_set_name, use_list_a, use_list_b, use_list_c]
+            outputs=[create_set_result, current_set_display, unified_list_display, list_a_display, list_b_display, list_c_display, new_set_name]
         )
         
         # Stage 9b: Dropdown選択肢の定期更新
