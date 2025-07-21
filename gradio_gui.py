@@ -33,31 +33,80 @@ class AutomationGUI:
         self.settings = self.load_settings()
     
     def load_settings(self):
-        """設定ファイルから設定をロード"""
+        """設定ファイルから設定をロード（prompt_sets構造対応）"""
         try:
             if os.path.exists(self.settings_file):
                 with open(self.settings_file, 'r', encoding='utf-8') as f:
                     settings = json.load(f)
                     print(f"設定ファイルをロードしました: {self.settings_file}")
+                    
+                    # Stage 4: prompt_sets構造への移行チェック
+                    if "prompt_sets" not in settings:
+                        print("Stage 4: 旧構造から新構造（prompt_sets）に移行中...")
+                        settings = self._migrate_to_prompt_sets(settings)
+                    
                     return settings
         except Exception as e:
             print(f"設定ファイルの読み込みエラー: {e}")
         
-        # デフォルト設定
+        # デフォルト設定（新構造）
+        return self._get_default_prompt_sets_settings()
+    
+    def _get_default_prompt_sets_settings(self):
+        """prompt_sets構造のデフォルト設定"""
         return {
             "fallback_message": "",
             "url": "https://www.genspark.ai/agents?type=moa_chat",
-            "prompt_a": "",
-            "prompt_b": "",
-            "prompt_c": "",
-            "prompt_a_list": [],
-            "prompt_b_list": [],
-            "prompt_c_list": [],
-            "use_list_a": False,
-            "use_list_b": False,
-            "use_list_c": False,
-            "bc_loop_count": 0
+            "bc_loop_count": 0,
+            "prompt_sets": {
+                "デフォルト": {
+                    "prompt_a": "",
+                    "prompt_b": "",
+                    "prompt_c": "",
+                    "prompt_a_list": [],
+                    "prompt_b_list": [],
+                    "prompt_c_list": [],
+                    "use_list_a": False,
+                    "use_list_b": False,
+                    "use_list_c": False
+                }
+            },
+            "active_prompt_set": "デフォルト"
         }
+    
+    def _migrate_to_prompt_sets(self, old_settings):
+        """旧構造から新構造（prompt_sets）への移行"""
+        print("データ構造を移行中...")
+        
+        # 新構造のベース作成
+        new_settings = self._get_default_prompt_sets_settings()
+        
+        # 共通設定移行
+        new_settings["fallback_message"] = old_settings.get("fallback_message", "")
+        new_settings["url"] = old_settings.get("url", "https://www.genspark.ai/agents?type=moa_chat")
+        new_settings["bc_loop_count"] = old_settings.get("bc_loop_count", 0)
+        
+        # プロンプト関連を「デフォルト」セットに移行
+        default_set = new_settings["prompt_sets"]["デフォルト"]
+        default_set["prompt_a"] = old_settings.get("prompt_a", "")
+        default_set["prompt_b"] = old_settings.get("prompt_b", "")
+        default_set["prompt_c"] = old_settings.get("prompt_c", "")
+        default_set["prompt_a_list"] = old_settings.get("prompt_a_list", [])
+        default_set["prompt_b_list"] = old_settings.get("prompt_b_list", [])
+        default_set["prompt_c_list"] = old_settings.get("prompt_c_list", [])
+        default_set["use_list_a"] = old_settings.get("use_list_a", False)
+        default_set["use_list_b"] = old_settings.get("use_list_b", False)
+        default_set["use_list_c"] = old_settings.get("use_list_c", False)
+        
+        # 移行後保存
+        try:
+            with open(self.settings_file, 'w', encoding='utf-8') as f:
+                json.dump(new_settings, f, ensure_ascii=False, indent=2)
+            print(f"✅ prompt_sets構造への移行完了: {self.settings_file}")
+        except Exception as e:
+            print(f"❌ 移行後保存エラー: {e}")
+        
+        return new_settings
     
     def save_settings(self, **kwargs):
         """設定をファイルに保存"""
@@ -179,11 +228,19 @@ class AutomationGUI:
         
         return result_msg, self.get_unified_list_display()
     
-    # Stage 3: プロンプトセット管理メソッド（UIなし）
+    # Stage 3-4: プロンプトセット管理メソッド（新構造対応）
     def get_prompt_set_names(self):
-        """利用可能なプロンプトセット名のリストを取得（テスト用）"""
-        # 現在は単一セットのみ対応
-        return ["デフォルト"]
+        """利用可能なプロンプトセット名のリストを取得"""
+        return list(self.settings.get("prompt_sets", {}).keys())
+    
+    def get_active_prompt_set(self):
+        """アクティブなプロンプトセットを取得"""
+        active_set_name = self.settings.get("active_prompt_set", "デフォルト")
+        if active_set_name not in self.settings.get("prompt_sets", {}):
+            # アクティブセットが存在しない場合、デフォルトに設定
+            active_set_name = "デフォルト"
+            self.settings["active_prompt_set"] = active_set_name
+        return self.settings["prompt_sets"][active_set_name]
     
     def get_random_prompt(self, prompt_type, fallback_prompt):
         """リストからランダムプロンプトを取得"""
