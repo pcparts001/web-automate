@@ -1124,12 +1124,24 @@ class ChromeAutomationTool:
         
         # 改行が検出されたら同じ場所にもう一つ改行を追加
         cleaned_text = cleaned_text.strip()
+        original_newline_count = cleaned_text.count('\n')
+        self.logger.info(f"改行処理開始: 元テキスト改行数={original_newline_count}")
+        
         if '\n' in cleaned_text:
+            self.logger.info("改行が検出されました - 二重改行変換を実行中...")
             # 単一改行を二重改行に変換（ただし、既に二重改行の部分は変更しない）
             cleaned_text = cleaned_text.replace('\n\n', '\n__DOUBLE_NEWLINE__')  # 既存の二重改行を一時的に保護
+            protected_double_count = cleaned_text.count('\n__DOUBLE_NEWLINE__')
+            self.logger.info(f"既存の二重改行を保護: {protected_double_count}箇所")
+            
             cleaned_text = cleaned_text.replace('\n', '\n\n')  # 単一改行を二重改行に
             cleaned_text = cleaned_text.replace('\n__DOUBLE_NEWLINE__', '\n\n')  # 保護した二重改行を復元
-            self.logger.debug("改行を二重改行に変換しました")
+            
+            final_newline_count = cleaned_text.count('\n')
+            self.logger.info(f"改行処理完了: {original_newline_count} → {final_newline_count}個の改行")
+            self.logger.info("✅ 改行を二重改行に変換しました")
+        else:
+            self.logger.info("改行が検出されませんでした - 変換をスキップ")
         
         return cleaned_text
 
