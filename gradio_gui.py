@@ -129,26 +129,33 @@ class AutomationGUI:
         if not new_prompt.strip():
             return f"❌ プロンプトが空です", self.get_list_display(prompt_type)
             
+        # アクティブセットに追加
+        active_set = self.get_active_prompt_set()
         list_key = f"prompt_{prompt_type}_list"
-        if list_key not in self.settings:
-            self.settings[list_key] = []
+        
+        if list_key not in active_set:
+            active_set[list_key] = []
             
-        self.settings[list_key].append(new_prompt.strip())
-        self.save_settings(**{list_key: self.settings[list_key]})
+        active_set[list_key].append(new_prompt.strip())
+        self.save_settings()
         
         return f"✅ プロンプト{prompt_type.upper()}リストに追加しました", self.get_list_display(prompt_type)
     
     def remove_from_list(self, prompt_type, index):
         """プロンプトをリストから削除"""
+        # アクティブセットから削除
+        active_set = self.get_active_prompt_set()
         list_key = f"prompt_{prompt_type}_list"
-        if list_key not in self.settings or not self.settings[list_key]:
+        
+        prompt_list = active_set.get(list_key, [])
+        if not prompt_list:
             return f"❌ プロンプト{prompt_type.upper()}リストが空です", self.get_list_display(prompt_type)
             
         try:
             index = int(index)
-            if 0 <= index < len(self.settings[list_key]):
-                removed = self.settings[list_key].pop(index)
-                self.save_settings(**{list_key: self.settings[list_key]})
+            if 0 <= index < len(prompt_list):
+                removed = prompt_list.pop(index)
+                self.save_settings()
                 return f"✅ 削除しました: {removed[:50]}...", self.get_list_display(prompt_type)
             else:
                 return f"❌ インデックス {index} が範囲外です", self.get_list_display(prompt_type)
@@ -157,8 +164,12 @@ class AutomationGUI:
     
     def edit_list_item(self, prompt_type, index, new_content):
         """リスト項目を編集"""
+        # アクティブセット内の項目を編集
+        active_set = self.get_active_prompt_set()
         list_key = f"prompt_{prompt_type}_list"
-        if list_key not in self.settings or not self.settings[list_key]:
+        
+        prompt_list = active_set.get(list_key, [])
+        if not prompt_list:
             return f"❌ プロンプト{prompt_type.upper()}リストが空です", self.get_list_display(prompt_type)
             
         if not new_content.strip():
@@ -166,10 +177,10 @@ class AutomationGUI:
             
         try:
             index = int(index)
-            if 0 <= index < len(self.settings[list_key]):
-                old_content = self.settings[list_key][index]
-                self.settings[list_key][index] = new_content.strip()
-                self.save_settings(**{list_key: self.settings[list_key]})
+            if 0 <= index < len(prompt_list):
+                old_content = prompt_list[index]
+                prompt_list[index] = new_content.strip()
+                self.save_settings()
                 return f"✅ 編集しました: {old_content[:30]}... → {new_content[:30]}...", self.get_list_display(prompt_type)
             else:
                 return f"❌ インデックス {index} が範囲外です", self.get_list_display(prompt_type)
@@ -178,32 +189,39 @@ class AutomationGUI:
     
     def get_list_display(self, prompt_type):
         """リストの表示用文字列を取得"""
+        # アクティブセットから取得
+        active_set = self.get_active_prompt_set()
         list_key = f"prompt_{prompt_type}_list"
-        if list_key not in self.settings or not self.settings[list_key]:
+        
+        prompt_list = active_set.get(list_key, [])
+        if not prompt_list:
             return f"プロンプト{prompt_type.upper()}リスト: (空)"
         
         items = []
-        for i, prompt in enumerate(self.settings[list_key]):
+        for i, prompt in enumerate(prompt_list):
             items.append(f"{i}: {prompt}")
         
-        return f"プロンプト{prompt_type.upper()}リスト ({len(self.settings[list_key])}件):\n" + "\n".join(items)
+        return f"プロンプト{prompt_type.upper()}リスト ({len(prompt_list)}件):\n" + "\n".join(items)
     
     def get_unified_list_display(self):
         """A/B/C統合リストの表示用文字列を取得（読み取り専用）"""
         all_items = []
         
+        # アクティブセットから取得
+        active_set = self.get_active_prompt_set()
+        
         # プロンプトA
-        list_a = self.settings.get("prompt_a_list", [])
+        list_a = active_set.get("prompt_a_list", [])
         for i, prompt in enumerate(list_a):
             all_items.append(f"A-{i}: {prompt}")
         
         # プロンプトB
-        list_b = self.settings.get("prompt_b_list", [])
+        list_b = active_set.get("prompt_b_list", [])
         for i, prompt in enumerate(list_b):
             all_items.append(f"B-{i}: {prompt}")
         
         # プロンプトC
-        list_c = self.settings.get("prompt_c_list", [])
+        list_c = active_set.get("prompt_c_list", [])
         for i, prompt in enumerate(list_c):
             all_items.append(f"C-{i}: {prompt}")
         
