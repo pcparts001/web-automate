@@ -805,6 +805,14 @@ def create_prompt_list_tab(gui):
     # 統合リスト表示セクション（Stage 1-2: 表示+追加機能）
     with gr.Column():
         gr.Markdown("## 📋 統合プロンプトリスト (全体表示)")
+        
+        # Stage 5: 最小限プロンプトセット表示（読み取り専用のみ）
+        current_set_display = gr.Textbox(
+            label="現在のプロンプトセット", 
+            value=gui.settings.get("active_prompt_set", "デフォルト"),
+            interactive=False
+        )
+        
         unified_list_display = gr.Textbox(
             label="A/B/C統合プロンプトリスト", 
             lines=12, 
