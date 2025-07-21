@@ -58,6 +58,7 @@ class AutomationGUI:
             "fallback_message": "",
             "url": "https://www.genspark.ai/agents?type=moa_chat",
             "bc_loop_count": 0,
+            "active_prompt_set": "デフォルト",
             "prompt_sets": {
                 "デフォルト": {
                     "prompt_a": "",
@@ -81,10 +82,11 @@ class AutomationGUI:
         # 新構造のベース作成
         new_settings = self._get_default_prompt_sets_settings()
         
-        # 共通設定移行
+        # 共通設定移行（active_prompt_set含む）
         new_settings["fallback_message"] = old_settings.get("fallback_message", "")
         new_settings["url"] = old_settings.get("url", "https://www.genspark.ai/agents?type=moa_chat")
         new_settings["bc_loop_count"] = old_settings.get("bc_loop_count", 0)
+        new_settings["active_prompt_set"] = old_settings.get("active_prompt_set", "デフォルト")
         
         # プロンプト関連を「デフォルト」セットに移行
         default_set = new_settings["prompt_sets"]["デフォルト"]
@@ -98,11 +100,22 @@ class AutomationGUI:
         default_set["use_list_b"] = old_settings.get("use_list_b", False)
         default_set["use_list_c"] = old_settings.get("use_list_c", False)
         
+        # 旧構造のキーを完全に削除（移行後の混在回避）
+        old_keys_to_remove = [
+            "prompt_a", "prompt_b", "prompt_c",
+            "prompt_a_list", "prompt_b_list", "prompt_c_list", 
+            "use_list_a", "use_list_b", "use_list_c"
+        ]
+        for key in old_keys_to_remove:
+            if key in new_settings:
+                del new_settings[key]
+                print(f"[DEBUG] 旧構造キー削除: {key}")
+        
         # 移行後保存
         try:
             with open(self.settings_file, 'w', encoding='utf-8') as f:
                 json.dump(new_settings, f, ensure_ascii=False, indent=2)
-            print(f"✅ prompt_sets構造への移行完了: {self.settings_file}")
+            print(f"✅ prompt_sets構造への移行完了（旧キー削除済み): {self.settings_file}")
         except Exception as e:
             print(f"❌ 移行後保存エラー: {e}")
         
