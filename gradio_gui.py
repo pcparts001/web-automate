@@ -726,10 +726,10 @@ def create_interface():
         # タブ切り替え
         with gr.Tabs():
             with gr.TabItem("🚀 メイン機能"):
-                status_display, response_display = create_main_tab(gui)
+                status_display, response_display, bc_loop_input = create_main_tab(gui)
             
             with gr.TabItem("📝 プロンプトリストの編集"):
-                create_prompt_list_tab(gui)
+                create_prompt_list_tab(gui, bc_loop_input)
         
         # リアルタイム更新設定
         interface.load(
@@ -831,9 +831,9 @@ def create_main_tab(gui):
         outputs=[save_status]
     )
     
-    return status_display, response_display
+    return status_display, response_display, bc_loop_input
 
-def create_prompt_list_tab(gui):
+def create_prompt_list_tab(gui, bc_loop_input=None):
     """プロンプトリスト編集タブのコンポーネントを作成"""
     
     # 統合リスト表示セクション（Stage 1-2: 表示+追加機能）
@@ -1034,6 +1034,24 @@ def create_prompt_list_tab(gui):
         inputs=[unified_category, unified_new_prompt],
         outputs=[unified_result, unified_list_display, list_a_display, list_b_display, list_c_display]
     ).then(fn=lambda: "", outputs=[unified_new_prompt])
+    
+    # Stage 7b: プロンプトセット作成イベントハンドラー
+    if bc_loop_input is not None:
+        def create_set_with_refresh(set_name, bc_count):
+            """プロンプトセット作成 + UI更新"""
+            result = gui.create_prompt_set(set_name)
+            
+            # 作成後にドロップダウンの選択肢を更新
+            new_choices = gui.get_prompt_set_names()
+            new_current_display = gui.settings.get("active_prompt_set", "デフォルト")
+            
+            return result, gr.Dropdown.update(choices=new_choices), new_current_display
+        
+        create_set_btn.click(
+            fn=create_set_with_refresh,
+            inputs=[new_set_name, bc_loop_input],  # bc_loop_inputを一貫性のため含める
+            outputs=[create_set_result, set_selector, current_set_display]
+        ).then(fn=lambda: "", outputs=[new_set_name])
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

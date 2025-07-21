@@ -1,0 +1,30 @@
+{
+  "fallback_message": "",
+  "url": "https://www.genspark.ai/agents?type=moa_chat",
+  "bc_loop_count": 0,
+  "prompt_sets": {
+    "デフォルト": {
+      "prompt_a": "",
+      "prompt_b": "",
+      "prompt_c": "",
+      "prompt_a_list": [],
+      "prompt_b_list": [],
+      "prompt_c_list": [],
+      "use_list_a": false,
+      "use_list_b": false,
+      "use_list_c": false
+    },
+    "テスト山": {
+      "prompt_a": "",
+      "prompt_b": "",
+      "prompt_c": "",
+      "prompt_a_list": [],
+      "prompt_b_list": [],
+      "prompt_c_list": [],
+      "use_list_a": false,
+      "use_list_b": false,
+      "use_list_c": false
+    }
+  },
+  "active_prompt_set": "デフォルト"
+}
