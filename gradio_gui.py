@@ -371,8 +371,19 @@ class AutomationGUI:
         
         # Stage 11b: 既存セット上書き機能（削除→新規作成方式）
         if set_name in self.settings.get("prompt_sets", {}):
+            print(f"[DEBUG] 既存セット '{set_name}' を削除します")
+            # 削除前にアクティブセット情報を保持
+            was_active_set = (self.settings.get("active_prompt_set") == set_name)
+            print(f"[DEBUG] 削除するセットがアクティブセット?: {was_active_set}")
+            
             # 既存セットを削除してから新規作成
             del self.settings["prompt_sets"][set_name]
+            
+            # アクティブセットだった場合、一時的にデフォルトに変更
+            if was_active_set:
+                print(f"[DEBUG] アクティブセットを一時的に'デフォルト'に変更")
+                self.settings["active_prompt_set"] = "デフォルト"
+            
             overwrite_message = f"（既存セット '{set_name}' を上書き）"
         else:
             overwrite_message = ""
@@ -409,8 +420,17 @@ class AutomationGUI:
         
         self.settings["prompt_sets"][set_name] = new_set
         
+        # 上書きの場合、アクティブセットを復元
+        if overwrite_message:  # 上書きの場合
+            print(f"[DEBUG] セット作成後、アクティブセットを '{set_name}' に復元")
+            self.settings["active_prompt_set"] = set_name
+        
         # 設定を保存
         self.save_settings()
+        
+        # 作成後の確認
+        print(f"[DEBUG] セット作成完了後のactive_prompt_set: {self.settings.get('active_prompt_set', 'unknown')}")
+        print(f"[DEBUG] 利用可能セット一覧: {list(self.settings.get('prompt_sets', {}).keys())}")
         
         # コピーされた内容の統計
         total_items = (len(new_set["prompt_a_list"]) + 
