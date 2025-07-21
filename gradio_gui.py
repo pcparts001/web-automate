@@ -24,6 +24,11 @@ class AutomationGUI:
         self.chrome_initialized = False
         self.settings_file = "gui_settings.json"
         
+        # プロンプトフロー状態管理
+        self.current_prompt_type = None
+        self.current_bc_cycle = 0
+        self.max_bc_cycles = 0
+        
         # 設定をロード
         self.settings = self.load_settings()
     
@@ -50,7 +55,8 @@ class AutomationGUI:
             "prompt_c_list": [],
             "use_list_a": False,
             "use_list_b": False,
-            "use_list_c": False
+            "use_list_c": False,
+            "bc_loop_count": 0
         }
     
     def save_settings(self, **kwargs):
@@ -147,7 +153,7 @@ class AutomationGUI:
         else:
             return fallback_prompt
         
-    def start_prompt_flow(self, url, prompt_a, prompt_b, prompt_c, use_fallback, fallback_message, retry_count):
+    def start_prompt_flow(self, url, prompt_a, prompt_b, prompt_c, use_fallback, fallback_message, retry_count, bc_loop_count):
         """プロンプトフロー自動化を開始"""
         if self.is_running:
             return "⚠️ 既に実行中です", "", "実行中"
@@ -157,17 +163,22 @@ class AutomationGUI:
             
         self.is_running = True
         
+        # プロンプトフロー状態を初期化
+        self.current_prompt_type = None
+        self.current_bc_cycle = 0
+        self.max_bc_cycles = max(0, int(bc_loop_count))
+        
         # バックグラウンドスレッドで実行
         self.current_thread = threading.Thread(
             target=self._run_prompt_flow,
-            args=(url, prompt_a, prompt_b, prompt_c, use_fallback, fallback_message, retry_count),
+            args=(url, prompt_a, prompt_b, prompt_c, use_fallback, fallback_message, retry_count, bc_loop_count),
             daemon=True
         )
         self.current_thread.start()
         
         return "🔄 プロンプトフローを開始しました", "", "実行中"
     
-    def _run_prompt_flow(self, url, prompt_a, prompt_b, prompt_c, use_fallback, fallback_message, retry_count):
+    def _run_prompt_flow(self, url, prompt_a, prompt_b, prompt_c, use_fallback, fallback_message, retry_count, bc_loop_count):
         """プロンプトフローのバックグラウンド実行"""
         try:
             # Chrome初期化
@@ -195,6 +206,7 @@ class AutomationGUI:
             # 最初にプロンプトAを送信
             if self.is_running:
                 cycle_count += 1
+                self.current_prompt_type = "A"
                 self.status_queue.put(f"🔄 サイクル{cycle_count}: プロンプトA送信")
                 
                 wait_time = random.randint(5, 30)
@@ -225,10 +237,15 @@ class AutomationGUI:
                     self.status_queue.put(f"❌ プロンプトAでエラーが発生")
                     # エラーでも続行
             
-            # B→C→B→Cの無限ループ
-            while self.is_running:
+            # B→C→B→Cのループ（回数制御対応）
+            bc_cycles = 0
+            max_cycles = max(0, int(bc_loop_count))
+            
+            while self.is_running and (max_cycles == 0 or bc_cycles < max_cycles):
                 # プロンプトB送信
                 if self.is_running:
+                    self.current_prompt_type = "B"
+                    self.current_bc_cycle = bc_cycles + 1
                     wait_time = random.randint(5, 30)
                     self.status_queue.put(f"⏱️ プロンプトB送信前の待機中... ({wait_time}秒)")
                     
@@ -238,7 +255,8 @@ class AutomationGUI:
                         time.sleep(1)
                     
                     actual_prompt_b = self.get_random_prompt("b", prompt_b)
-                    self.status_queue.put(f"📤 プロンプトB送信中: {actual_prompt_b[:50]}...")
+                    loop_info = f" (サイクル{self.current_bc_cycle}/{max_cycles if max_cycles > 0 else '∞'})"
+                    self.status_queue.put(f"📤 プロンプトB送信中{loop_info}: {actual_prompt_b[:50]}...")
                     response_b = self._send_prompt_with_retry(actual_prompt_b, use_fallback, fallback_message, retry_count)
                     
                     if response_b == "STOPPED":
@@ -256,6 +274,7 @@ class AutomationGUI:
                 
                 # プロンプトC送信
                 if self.is_running:
+                    self.current_prompt_type = "C"
                     wait_time = random.randint(5, 30)
                     self.status_queue.put(f"⏱️ プロンプトC送信前の待機中... ({wait_time}秒)")
                     
@@ -265,7 +284,8 @@ class AutomationGUI:
                         time.sleep(1)
                     
                     actual_prompt_c = self.get_random_prompt("c", prompt_c)
-                    self.status_queue.put(f"📤 プロンプトC送信中: {actual_prompt_c[:50]}...")
+                    loop_info = f" (サイクル{self.current_bc_cycle}/{max_cycles if max_cycles > 0 else '∞'})"
+                    self.status_queue.put(f"📤 プロンプトC送信中{loop_info}: {actual_prompt_c[:50]}...")
                     response_c = self._send_prompt_with_retry(actual_prompt_c, use_fallback, fallback_message, retry_count)
                     
                     if response_c == "STOPPED":
@@ -281,8 +301,15 @@ class AutomationGUI:
                     else:
                         self.status_queue.put(f"❌ プロンプトCでエラーが発生")
                 
+                bc_cycles += 1
                 cycle_count += 1
-                self.status_queue.put(f"🔄 サイクル{cycle_count}完了、次のB→Cサイクルへ...")
+                
+                if max_cycles > 0 and bc_cycles >= max_cycles:
+                    self.status_queue.put(f"🏁 指定されたB→Cサイクル({max_cycles}回)が完了しました")
+                    break
+                else:
+                    remaining = f"残り{max_cycles - bc_cycles}回" if max_cycles > 0 else "無限継続"
+                    self.status_queue.put(f"🔄 サイクル{cycle_count}完了、次のB→Cサイクルへ... ({remaining})")
                 
         except Exception as e:
             error_msg = f"プロンプトフローエラー: {str(e)}"
@@ -290,6 +317,8 @@ class AutomationGUI:
             self.response_queue.put(error_msg)
         finally:
             self.is_running = False
+            self.current_prompt_type = None
+            self.current_bc_cycle = 0
     
     def _send_prompt_with_retry(self, prompt, use_fallback, fallback_message, retry_count):
         """プロンプト送信とリトライ処理"""
@@ -521,7 +550,16 @@ class AutomationGUI:
         try:
             return self.status_queue.get_nowait()
         except queue.Empty:
-            return "待機中" if not self.is_running else "実行中"
+            if not self.is_running:
+                return "待機中"
+            elif self.current_prompt_type:
+                if self.max_bc_cycles > 0:
+                    progress = f"{self.current_bc_cycle}/{self.max_bc_cycles}"
+                else:
+                    progress = f"{self.current_bc_cycle}/∞"
+                return f"実行中 (プロンプト{self.current_prompt_type} - {progress})"
+            else:
+                return "実行中"
     
     def get_response_update(self):
         """応答更新を取得"""
@@ -581,6 +619,9 @@ def create_main_tab(gui):
             prompt_b_input = gr.Textbox(label="🅱️ プロンプトB (追加情報要求)", lines=3, placeholder="追加情報の候補をリクエストするプロンプト...", value=gui.settings.get("prompt_b", ""))
             prompt_c_input = gr.Textbox(label="🅾️ プロンプトC (候補承認)", lines=3, placeholder="提案された候補にOKするプロンプト...", value=gui.settings.get("prompt_c", ""))
             
+            # B->Cループ回数制御
+            bc_loop_input = gr.Number(label="🔄 B→Cループ回数 (0=無限)", value=gui.settings.get("bc_loop_count", 0), minimum=0, maximum=1000)
+            
             with gr.Row():
                 prompt_flow_btn = gr.Button("🔄 プロンプトフロー開始", variant="primary")
                 flow_stop_btn = gr.Button("⏹️ フロー停止", variant="stop")
@@ -611,7 +652,7 @@ def create_main_tab(gui):
     # プロンプトフローボタンのイベント
     prompt_flow_btn.click(
         fn=gui.start_prompt_flow,
-        inputs=[url_input, prompt_a_input, prompt_b_input, prompt_c_input, use_fallback, fallback_input, retry_count],
+        inputs=[url_input, prompt_a_input, prompt_b_input, prompt_c_input, use_fallback, fallback_input, retry_count, bc_loop_input],
         outputs=[status_display, response_display, status_display]
     )
     
@@ -619,7 +660,7 @@ def create_main_tab(gui):
     
     # 設定保存ボタンのイベント
     save_settings_btn.click(
-        fn=lambda url, fallback, pa, pb, pc, ua, ub, uc: gui.save_settings(
+        fn=lambda url, fallback, pa, pb, pc, ua, ub, uc, bc_count: gui.save_settings(
             url=url, 
             fallback_message=fallback,
             prompt_a=pa,
@@ -627,9 +668,10 @@ def create_main_tab(gui):
             prompt_c=pc,
             use_list_a=ua,
             use_list_b=ub,
-            use_list_c=uc
+            use_list_c=uc,
+            bc_loop_count=bc_count
         ),
-        inputs=[url_input, fallback_input, prompt_a_input, prompt_b_input, prompt_c_input, use_list_a, use_list_b, use_list_c],
+        inputs=[url_input, fallback_input, prompt_a_input, prompt_b_input, prompt_c_input, use_list_a, use_list_b, use_list_c, bc_loop_input],
         outputs=[save_status]
     ).then(
         fn=lambda: gr.update(visible=True),
