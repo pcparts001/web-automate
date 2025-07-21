@@ -166,6 +166,19 @@ class AutomationGUI:
         header = f"📋 統合プロンプトリスト (合計 {total_count}件: A={len(list_a)}, B={len(list_b)}, C={len(list_c)}):"
         return header + "\n" + "\n".join(all_items)
     
+    def add_to_unified_list(self, category, new_prompt):
+        """統合リストに新しいプロンプトを追加（カテゴリ指定）"""
+        if not new_prompt.strip():
+            return f"❌ プロンプトが空です", self.get_unified_list_display()
+        
+        if category not in ["a", "b", "c"]:
+            return f"❌ 無効なカテゴリです: {category}", self.get_unified_list_display()
+            
+        # 対応する個別リストメソッドを呼び出し
+        result_msg, _ = self.add_to_list(category, new_prompt)
+        
+        return result_msg, self.get_unified_list_display()
+    
     def get_random_prompt(self, prompt_type, fallback_prompt):
         """リストからランダムプロンプトを取得"""
         use_list_key = f"use_list_{prompt_type}"
@@ -726,7 +739,7 @@ def create_main_tab(gui):
 def create_prompt_list_tab(gui):
     """プロンプトリスト編集タブのコンポーネントを作成"""
     
-    # 統合リスト表示セクション（Stage 1: 読み取り専用）
+    # 統合リスト表示セクション（Stage 1-2: 表示+追加機能）
     with gr.Column():
         gr.Markdown("## 📋 統合プロンプトリスト (全体表示)")
         unified_list_display = gr.Textbox(
@@ -736,6 +749,24 @@ def create_prompt_list_tab(gui):
             interactive=False,
             placeholder="A/B/Cすべてのプロンプトがここに表示されます..."
         )
+        
+        # Stage 2: 統合リストへの追加機能
+        gr.Markdown("### ➕ 統合リストに追加")
+        with gr.Row():
+            unified_category = gr.Dropdown(
+                choices=[("プロンプトA", "a"), ("プロンプトB", "b"), ("プロンプトC", "c")],
+                value="a",
+                label="カテゴリ選択",
+                scale=1
+            )
+            unified_new_prompt = gr.Textbox(
+                label="新しいプロンプト", 
+                placeholder="統合リストに追加するプロンプト...", 
+                scale=3
+            )
+            unified_add_btn = gr.Button("🚀 統合追加", variant="primary", scale=1)
+        
+        unified_result = gr.Textbox(label="統合操作結果", interactive=False)
     
     gr.Markdown("---")  # セクション区切り
     
@@ -855,6 +886,24 @@ def create_prompt_list_tab(gui):
         inputs=[remove_index_c],
         outputs=[result_c, list_c_display, unified_list_display]
     )
+    
+    # Stage 2: 統合追加ボタンのイベントハンドラー
+    def unified_add_with_list_updates(category, prompt):
+        """統合追加 + 個別リスト表示更新"""
+        result_msg, unified_display = gui.add_to_unified_list(category, prompt)
+        
+        # 個別リスト表示も更新
+        list_a_new = gui.get_list_display("a")
+        list_b_new = gui.get_list_display("b") 
+        list_c_new = gui.get_list_display("c")
+        
+        return result_msg, unified_display, list_a_new, list_b_new, list_c_new
+    
+    unified_add_btn.click(
+        fn=unified_add_with_list_updates,
+        inputs=[unified_category, unified_new_prompt],
+        outputs=[unified_result, unified_list_display, list_a_display, list_b_display, list_c_display]
+    ).then(fn=lambda: "", outputs=[unified_new_prompt])
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
