@@ -369,6 +369,11 @@ class AutomationGUI:
         print(f"[DEBUG] 再読み込み後のself.settings active_prompt_set: {self.settings.get('active_prompt_set', 'unknown')}")
         print(f"[DEBUG] 再読み込み後のself.settingsキー一覧: {list(self.settings.keys())}")
         
+        # **修正**: セット削除前に現在のアクティブセット内容を保存
+        print(f"[DEBUG] セット削除前にアクティブセット内容を保存")
+        active_set = self.get_active_prompt_set()
+        print(f"[DEBUG] 保存したアクティブセット内容: A={len(active_set.get('prompt_a_list', []))}, B={len(active_set.get('prompt_b_list', []))}, C={len(active_set.get('prompt_c_list', []))}項目")
+        
         # Stage 11b: 既存セット上書き機能（削除→新規作成方式）
         if set_name in self.settings.get("prompt_sets", {}):
             print(f"[DEBUG] 既存セット '{set_name}' を削除します")
@@ -388,18 +393,9 @@ class AutomationGUI:
         else:
             overwrite_message = ""
         
-        # 最新のアクティブセットの内容を取得してコピー
-        print(f"[DEBUG] get_active_prompt_set() 呼び出し前")
-        active_set = self.get_active_prompt_set()
-        print(f"[DEBUG] get_active_prompt_set() 呼び出し後")
-        
-        # デバッグログ: セット作成時の詳細情報
-        print(f"[DEBUG] セット作成 '{set_name}': アクティブセット='{self.settings.get('active_prompt_set', 'unknown')}'")
-        print(f"[DEBUG] 取得したアクティブセットの内容確認:")
-        print(f"[DEBUG] - prompt_a_list: {len(active_set.get('prompt_a_list', []))}項目")
-        print(f"[DEBUG] - prompt_b_list: {len(active_set.get('prompt_b_list', []))}項目") 
-        print(f"[DEBUG] - prompt_c_list: {len(active_set.get('prompt_c_list', []))}項目")
-        print(f"[DEBUG] A={len(active_set.get('prompt_a_list', []))}, B={len(active_set.get('prompt_b_list', []))}, C={len(active_set.get('prompt_c_list', []))}項目")
+        # **注意**: active_setは既に削除前に保存済み
+        print(f"[DEBUG] 削除後の確認 - 保存済みアクティブセット内容を使用")
+        print(f"[DEBUG] セット作成 '{set_name}' で使用する内容: A={len(active_set.get('prompt_a_list', []))}, B={len(active_set.get('prompt_b_list', []))}, C={len(active_set.get('prompt_c_list', []))}項目")
         
         # 新しいセットを現在の内容で初期化
         new_set = {
