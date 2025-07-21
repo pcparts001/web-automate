@@ -806,12 +806,21 @@ def create_prompt_list_tab(gui):
     with gr.Column():
         gr.Markdown("## 📋 統合プロンプトリスト (全体表示)")
         
-        # Stage 5: 最小限プロンプトセット表示（読み取り専用のみ）
-        current_set_display = gr.Textbox(
-            label="現在のプロンプトセット", 
-            value=gui.settings.get("active_prompt_set", "デフォルト"),
-            interactive=False
-        )
+        # Stage 5-6: プロンプトセット表示・選択UI
+        with gr.Row():
+            current_set_display = gr.Textbox(
+                label="現在のプロンプトセット", 
+                value=gui.settings.get("active_prompt_set", "デフォルト"),
+                interactive=False,
+                scale=1
+            )
+            # Stage 6: プロンプトセット選択Dropdown（イベントハンドラーなし）
+            set_selector = gr.Dropdown(
+                choices=gui.get_prompt_set_names(),
+                value=gui.settings.get("active_prompt_set", "デフォルト"),
+                label="セット選択",
+                scale=1
+            )
         
         unified_list_display = gr.Textbox(
             label="A/B/C統合プロンプトリスト", 
