@@ -275,8 +275,14 @@ class AutomationGUI:
         else:
             overwrite_message = ""
         
-        # 現在のアクティブセットの内容を取得してコピー
+        # 最新のアクティブセットの内容を取得してコピー（同期問題対策）
+        # 強制的に設定を再読み込み
+        self.load_settings()
         active_set = self.get_active_prompt_set()
+        
+        # デバッグログ: セット作成時の詳細情報
+        print(f"[DEBUG] セット作成 '{set_name}': アクティブセット='{self.settings.get('active_prompt_set', 'unknown')}'")
+        print(f"[DEBUG] A={len(active_set.get('prompt_a_list', []))}, B={len(active_set.get('prompt_b_list', []))}, C={len(active_set.get('prompt_c_list', []))}項目")
         
         # 新しいセットを現在の内容で初期化
         new_set = {
