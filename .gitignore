@@ -28,3 +28,6 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# GUI settings (user-specific)
+gui_settings.json
