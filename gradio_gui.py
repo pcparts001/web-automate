@@ -528,6 +528,17 @@ class AutomationGUI:
             logging.info("=" * 60)
             self.status_queue.put("プロンプト処理完了（Chrome維持中）")
     
+    def stop_prompt_only(self):
+        """プロンプトのみ停止（Chrome維持）"""
+        if not self.is_running:
+            return "待機中です", "待機中"
+            
+        self.is_running = False
+        self.current_prompt_type = None
+        self.current_bc_cycle = 0
+                
+        return "⏸️ プロンプト処理を停止しました（Chrome維持中）", "待機中"
+    
     def stop_automation(self):
         """自動化を停止（Chromeも終了）"""
         if not self.is_running and not self.chrome_initialized:
@@ -541,6 +552,8 @@ class AutomationGUI:
                 pass
         self.chrome_initialized = False
         self.tool = None
+        self.current_prompt_type = None
+        self.current_bc_cycle = 0
                 
         return "🛑 自動化を停止し、Chromeを終了しました", "停止"
     
@@ -623,7 +636,8 @@ def create_main_tab(gui):
             
             with gr.Row():
                 prompt_flow_btn = gr.Button("🔄 プロンプトフロー開始", variant="primary")
-                flow_stop_btn = gr.Button("⏹️ フロー停止", variant="stop")
+                flow_prompt_stop_btn = gr.Button("⏸️ フロー停止", variant="secondary")
+                flow_stop_btn = gr.Button("⏹️ 完全停止", variant="stop")
             
             # 設定保存ボタン
             save_settings_btn = gr.Button("💾 設定を保存", variant="secondary")
@@ -633,7 +647,8 @@ def create_main_tab(gui):
             
             with gr.Row():
                 start_btn = gr.Button("🚀 プロンプト送信", variant="primary")
-                stop_btn = gr.Button("🛑 停止", variant="stop")
+                prompt_stop_btn = gr.Button("⏸️ プロンプト停止", variant="secondary")
+                stop_btn = gr.Button("🛑 完全停止", variant="stop")
         
         with gr.Column(scale=2):
             status_display = gr.Textbox(label="📊 ツールステータス", value="待機中", interactive=False)
@@ -646,6 +661,7 @@ def create_main_tab(gui):
         outputs=[status_display, response_display, status_display]
     )
     
+    prompt_stop_btn.click(fn=gui.stop_prompt_only, outputs=[status_display, status_display])
     stop_btn.click(fn=gui.stop_automation, outputs=[status_display, status_display])
     
     # プロンプトフローボタンのイベント
@@ -655,6 +671,7 @@ def create_main_tab(gui):
         outputs=[status_display, response_display, status_display]
     )
     
+    flow_prompt_stop_btn.click(fn=gui.stop_prompt_only, outputs=[status_display, status_display])
     flow_stop_btn.click(fn=gui.stop_automation, outputs=[status_display, status_display])
     
     # 設定保存ボタンのイベント
