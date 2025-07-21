@@ -634,7 +634,8 @@ def create_main_tab(gui):
             
             with gr.Row():
                 prompt_flow_btn = gr.Button("🔄 プロンプトフロー開始", variant="primary")
-                flow_stop_btn = gr.Button("⏹️ フロー停止", variant="stop")
+                flow_prompt_stop_btn = gr.Button("⏸️ フロー停止", variant="secondary")
+                flow_stop_btn = gr.Button("⏹️ 完全停止", variant="stop")
             
             # 設定保存ボタン
             save_settings_btn = gr.Button("💾 設定を保存", variant="secondary")
@@ -668,6 +669,7 @@ def create_main_tab(gui):
         outputs=[status_display, response_display, status_display]
     )
     
+    flow_prompt_stop_btn.click(fn=gui.stop_prompt_only, outputs=[status_display, status_display])
     flow_stop_btn.click(fn=gui.stop_automation, outputs=[status_display, status_display])
     
     # 設定保存ボタンのイベント
