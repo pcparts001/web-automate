@@ -313,6 +313,35 @@ class AutomationGUI:
         
         return f"✅ プロンプトセットを '{set_name}' に切り替えました"
     
+    def delete_prompt_set(self, set_name):
+        """プロンプトセットを削除"""
+        if not set_name or not set_name.strip():
+            return "❌ セット名が空です"
+            
+        set_name = set_name.strip()
+        
+        # デフォルトセットの削除を防止
+        if set_name == "デフォルト":
+            return "❌ 「デフォルト」セットは削除できません"
+            
+        # セットの存在確認
+        if set_name not in self.settings.get("prompt_sets", {}):
+            return f"❌ セット '{set_name}' が見つかりません"
+            
+        # 現在のアクティブセットが削除対象の場合はデフォルトに切り替え
+        current_active = self.settings.get("active_prompt_set", "デフォルト")
+        if current_active == set_name:
+            self.settings["active_prompt_set"] = "デフォルト"
+            
+        # セットを削除
+        del self.settings["prompt_sets"][set_name]
+        self.save_settings()
+        
+        if current_active == set_name:
+            return f"✅ セット '{set_name}' を削除し、アクティブセットを「デフォルト」に変更しました"
+        else:
+            return f"✅ セット '{set_name}' を削除しました"
+    
     def get_random_prompt(self, prompt_type, fallback_prompt):
         """リストからランダムプロンプトを取得"""
         use_list_key = f"use_list_{prompt_type}"
@@ -909,6 +938,17 @@ def create_prompt_list_tab(gui, bc_loop_input=None):
             lines=2
         )
         
+        # Stage 10: プロンプトセット削除機能
+        gr.Markdown("### 🗑️ プロンプトセット削除")
+        with gr.Row():
+            delete_set_btn = gr.Button("🗑️ 選択中のセットを削除", variant="stop", scale=1)
+        
+        delete_set_result = gr.Textbox(
+            label="削除結果", 
+            interactive=False,
+            lines=2
+        )
+        
         unified_list_display = gr.Textbox(
             label="A/B/C統合プロンプトリスト", 
             lines=12, 
@@ -1121,6 +1161,30 @@ def create_prompt_list_tab(gui, bc_loop_input=None):
         dropdown_timer.tick(
             fn=update_dropdown_choices,
             outputs=[set_selector, current_set_display]
+        )
+        
+        # Stage 10: プロンプトセット削除イベントハンドラー
+        def delete_set_with_refresh(bc_count):
+            """選択中のプロンプトセット削除 + UI更新"""
+            current_active = gui.settings.get("active_prompt_set", "デフォルト")
+            result = gui.delete_prompt_set(current_active)
+            
+            # 削除後のUI更新
+            new_choices = gui.get_prompt_set_names()
+            new_active = gui.settings.get("active_prompt_set", "デフォルト")
+            new_unified_display = gui.get_unified_list_display()
+            new_list_a = gui.get_list_display("a")
+            new_list_b = gui.get_list_display("b") 
+            new_list_c = gui.get_list_display("c")
+            
+            return (result, gr.update(choices=new_choices), new_active, 
+                   new_unified_display, new_list_a, new_list_b, new_list_c)
+        
+        delete_set_btn.click(
+            fn=delete_set_with_refresh,
+            inputs=[bc_loop_input],  # bc_loop_inputを一貫性のため含める
+            outputs=[delete_set_result, set_selector, current_set_display, 
+                    unified_list_display, list_a_display, list_b_display, list_c_display]
         )
 
 if __name__ == "__main__":
