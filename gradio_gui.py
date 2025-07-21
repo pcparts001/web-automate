@@ -277,7 +277,7 @@ class AutomationGUI:
         
         # 設定を強制的に再読み込みしてUIとの同期を確保
         print(f"[DEBUG] セット作成前: 設定再読み込み実行")
-        self.load_settings()
+        self.settings = self.load_settings()
         
         # Stage 11b: 既存セット上書き機能（削除→新規作成方式）
         if set_name in self.settings.get("prompt_sets", {}):
@@ -341,7 +341,7 @@ class AutomationGUI:
         print(f"[DEBUG] 設定ファイル保存完了")
         
         # 保存後の確認のため設定を再読み込み
-        self.load_settings()
+        self.settings = self.load_settings()
         final_active = self.settings.get("active_prompt_set", "unknown")
         print(f"[DEBUG] ファイル保存確認: 再読み込み後のアクティブセット='{final_active}'")
         
