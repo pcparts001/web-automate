@@ -54,23 +54,31 @@ class AutomationGUI:
     
     def load_settings(self):
         """設定ファイルから設定をロード（prompt_sets構造対応）"""
+        print(f"[DEBUG] load_settings() 開始")
         try:
             if os.path.exists(self.settings_file):
                 with open(self.settings_file, 'r', encoding='utf-8') as f:
                     settings = json.load(f)
                     print(f"設定ファイルをロードしました: {self.settings_file}")
+                    print(f"[DEBUG] ファイル読み込み後のキー一覧: {list(settings.keys())}")
+                    print(f"[DEBUG] ファイル内active_prompt_set: {settings.get('active_prompt_set', 'NOT_FOUND')}")
                     
                     # Stage 4: prompt_sets構造への移行チェック
                     if "prompt_sets" not in settings:
                         print("Stage 4: 旧構造から新構造（prompt_sets）に移行中...")
                         settings = self._migrate_to_prompt_sets(settings)
+                        print(f"[DEBUG] 移行後active_prompt_set: {settings.get('active_prompt_set', 'NOT_FOUND')}")
                     else:
+                        print(f"[DEBUG] prompt_sets構造確認済み - 旧キーチェック開始")
                         # 新構造でも旧キーが残っている場合のクリーンアップ
                         old_keys_to_remove = [
                             "prompt_a", "prompt_b", "prompt_c",
                             "prompt_a_list", "prompt_b_list", "prompt_c_list", 
                             "use_list_a", "use_list_b", "use_list_c"
                         ]
+                        keys_found = [key for key in old_keys_to_remove if key in settings]
+                        print(f"[DEBUG] ファイル内検出された旧キー: {keys_found}")
+                        
                         keys_removed = []
                         for key in old_keys_to_remove:
                             if key in settings:
@@ -79,20 +87,29 @@ class AutomationGUI:
                         
                         if keys_removed:
                             print(f"[DEBUG] 読み込み時旧キー削除: {keys_removed}")
+                            print(f"[DEBUG] 削除前active_prompt_set: {settings.get('active_prompt_set', 'NOT_FOUND')}")
                             # クリーンアップ後再保存
                             try:
                                 with open(self.settings_file, 'w', encoding='utf-8') as f:
                                     json.dump(settings, f, ensure_ascii=False, indent=2)
                                 print(f"✅ 設定ファイルクリーンアップ完了")
+                                print(f"[DEBUG] 保存後active_prompt_set: {settings.get('active_prompt_set', 'NOT_FOUND')}")
                             except Exception as e:
                                 print(f"❌ クリーンアップ保存エラー: {e}")
+                        else:
+                            print(f"[DEBUG] 旧キーなし - クリーンアップ不要")
                     
+                    print(f"[DEBUG] load_settings() 戻り値のactive_prompt_set: {settings.get('active_prompt_set', 'NOT_FOUND')}")
+                    print(f"[DEBUG] load_settings() 戻り値のキー一覧: {list(settings.keys())}")
                     return settings
         except Exception as e:
             print(f"設定ファイルの読み込みエラー: {e}")
         
         # デフォルト設定（新構造）
-        return self._get_default_prompt_sets_settings()
+        print(f"[DEBUG] デフォルト設定を返します")
+        default_settings = self._get_default_prompt_sets_settings()
+        print(f"[DEBUG] デフォルト設定のactive_prompt_set: {default_settings.get('active_prompt_set', 'NOT_FOUND')}")
+        return default_settings
     
     def _get_default_prompt_sets_settings(self):
         """prompt_sets構造のデフォルト設定"""
@@ -316,12 +333,24 @@ class AutomationGUI:
     
     def get_active_prompt_set(self):
         """アクティブなプロンプトセットを取得"""
+        print(f"[DEBUG] get_active_prompt_set() 開始")
         active_set_name = self.settings.get("active_prompt_set", "デフォルト")
+        print(f"[DEBUG] self.settingsから取得したactive_set_name: '{active_set_name}'")
+        
+        available_sets = list(self.settings.get("prompt_sets", {}).keys())
+        print(f"[DEBUG] 利用可能なプロンプトセット: {available_sets}")
+        
         if active_set_name not in self.settings.get("prompt_sets", {}):
             # アクティブセットが存在しない場合、デフォルトに設定
+            print(f"[DEBUG] アクティブセット '{active_set_name}' が存在しません - デフォルトにフォールバック")
             active_set_name = "デフォルト"
             self.settings["active_prompt_set"] = active_set_name
-        return self.settings["prompt_sets"][active_set_name]
+        
+        target_set = self.settings["prompt_sets"][active_set_name]
+        print(f"[DEBUG] 返すセット名: '{active_set_name}'")
+        print(f"[DEBUG] セット内容: A={len(target_set.get('prompt_a_list', []))}, B={len(target_set.get('prompt_b_list', []))}, C={len(target_set.get('prompt_c_list', []))}項目")
+        
+        return target_set
     
     def create_prompt_set(self, set_name):
         """新しいプロンプトセットを作成"""
@@ -332,7 +361,13 @@ class AutomationGUI:
         
         # 設定を強制的に再読み込みしてUIとの同期を確保
         print(f"[DEBUG] セット作成前: 設定再読み込み実行")
+        print(f"[DEBUG] 再読み込み前のself.settings active_prompt_set: {self.settings.get('active_prompt_set', 'unknown')}")
+        print(f"[DEBUG] 再読み込み前のself.settingsキー一覧: {list(self.settings.keys())}")
+        
         self.settings = self.load_settings()
+        
+        print(f"[DEBUG] 再読み込み後のself.settings active_prompt_set: {self.settings.get('active_prompt_set', 'unknown')}")
+        print(f"[DEBUG] 再読み込み後のself.settingsキー一覧: {list(self.settings.keys())}")
         
         # Stage 11b: 既存セット上書き機能（削除→新規作成方式）
         if set_name in self.settings.get("prompt_sets", {}):
@@ -343,10 +378,16 @@ class AutomationGUI:
             overwrite_message = ""
         
         # 最新のアクティブセットの内容を取得してコピー
+        print(f"[DEBUG] get_active_prompt_set() 呼び出し前")
         active_set = self.get_active_prompt_set()
+        print(f"[DEBUG] get_active_prompt_set() 呼び出し後")
         
         # デバッグログ: セット作成時の詳細情報
         print(f"[DEBUG] セット作成 '{set_name}': アクティブセット='{self.settings.get('active_prompt_set', 'unknown')}'")
+        print(f"[DEBUG] 取得したアクティブセットの内容確認:")
+        print(f"[DEBUG] - prompt_a_list: {len(active_set.get('prompt_a_list', []))}項目")
+        print(f"[DEBUG] - prompt_b_list: {len(active_set.get('prompt_b_list', []))}項目") 
+        print(f"[DEBUG] - prompt_c_list: {len(active_set.get('prompt_c_list', []))}項目")
         print(f"[DEBUG] A={len(active_set.get('prompt_a_list', []))}, B={len(active_set.get('prompt_b_list', []))}, C={len(active_set.get('prompt_c_list', []))}項目")
         
         # 新しいセットを現在の内容で初期化
