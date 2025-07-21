@@ -267,8 +267,13 @@ class AutomationGUI:
         
         set_name = set_name.strip()
         
+        # Stage 11b: 既存セット上書き機能（削除→新規作成方式）
         if set_name in self.settings.get("prompt_sets", {}):
-            return f"⚠️ セット '{set_name}' は既に存在します"
+            # 既存セットを削除してから新規作成
+            del self.settings["prompt_sets"][set_name]
+            overwrite_message = f"（既存セット '{set_name}' を上書き）"
+        else:
+            overwrite_message = ""
         
         # 現在のアクティブセットの内容を取得してコピー
         active_set = self.get_active_prompt_set()
@@ -300,7 +305,7 @@ class AutomationGUI:
                       len(new_set["prompt_b_list"]) + 
                       len(new_set["prompt_c_list"]))
         
-        return f"✅ プロンプトセット '{set_name}' を作成しました\n📋 A/B/Cリスト内容をコピー（合計{total_items}項目）"
+        return f"✅ プロンプトセット '{set_name}' を作成しました{overwrite_message}\n📋 A/B/Cリスト内容をコピー（合計{total_items}項目）"
     
     def switch_prompt_set(self, set_name):
         """プロンプトセットを切り替え"""
@@ -1130,9 +1135,9 @@ def create_prompt_list_tab(gui, bc_loop_input=None):
             outputs=[create_set_result, set_selector, current_set_display]
         ).then(fn=lambda: "", outputs=[new_set_name])
         
-        # Stage 9a: プロンプトセット切り替えイベントハンドラー
+        # Stage 9a + 11a: プロンプトセット切り替えイベントハンドラー（セット名自動入力機能追加）
         def switch_set_with_refresh(selected_set, bc_count):
-            """プロンプトセット切り替え + 全UI更新"""
+            """プロンプトセット切り替え + 全UI更新 + セット名自動入力"""
             result = gui.switch_prompt_set(selected_set)
             
             # 切り替え後のUI更新
@@ -1141,12 +1146,13 @@ def create_prompt_list_tab(gui, bc_loop_input=None):
             new_list_b = gui.get_list_display("b")
             new_list_c = gui.get_list_display("c")
             
-            return result, selected_set, new_unified_display, new_list_a, new_list_b, new_list_c
+            # Stage 11a: 選択したセット名を「新しいセット名」に自動入力
+            return result, selected_set, new_unified_display, new_list_a, new_list_b, new_list_c, selected_set
         
         set_selector.change(
             fn=switch_set_with_refresh,
             inputs=[set_selector, bc_loop_input],  # bc_loop_inputを一貫性のため含める
-            outputs=[create_set_result, current_set_display, unified_list_display, list_a_display, list_b_display, list_c_display]
+            outputs=[create_set_result, current_set_display, unified_list_display, list_a_display, list_b_display, list_c_display, new_set_name]
         )
         
         # Stage 9b: Dropdown選択肢の定期更新
