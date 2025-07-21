@@ -668,7 +668,11 @@ def create_main_tab(gui):
         outputs=[status_display, response_display, status_display]
     )
     
-    flow_stop_btn.click(fn=gui.stop_automation, outputs=[status_display, status_display])
+    flow_stop_btn.click(
+        fn=lambda bc_count: gui.stop_automation(),
+        inputs=[bc_loop_input],
+        outputs=[status_display, status_display]
+    )
     
     # 設定保存ボタンのイベント
     save_settings_btn.click(

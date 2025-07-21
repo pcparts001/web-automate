@@ -19,7 +19,17 @@ AI chat applications（特にGenspark.ai）向けのChrome自動操作ツール�
 - **Gradio互換性問題**: 41d0ced使用により解決済み
 - **追加開発**: tkinter エディタ＋reload機能実装済み（別ブランチ）
 
-### 🔧 **Gradio 4.44.1 互換性問題の解決**
+### 🔧 **Gradio イベントハンドラーエラーの解決**
+- **問題**: ValueError: An event handler didn't receive enough input values (needed: 1, got: 0)
+- **エラー詳細**: Number コンポーネントへの入力が期待されているが受け取れない
+- **段階的特定結果**: 
+  - 段階1（メソッドのみ）: 問題なし
+  - 段階2（単発プロンプト用ボタン）: 問題なし  
+  - 段階3（プロンプトフロー用ボタン追加）: エラー発生
+- **問題箇所**: プロンプトフロー用の「⏸️ フロー停止」ボタン追加時
+- **推定原因**: プロンプトフロー部分のイベントハンドラー設定に問題
+
+### 🔧 **過去のGradio 4.44.1 互換性問題**
 - **問題**: .then()チェーンによるfunction index mismatch (KeyError: 23)
 - **根本原因**: Gradio内部関数インデックス管理の変更
 - **解決方法**: 安定版41d0cedの継続使用

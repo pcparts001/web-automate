@@ -1,0 +1,72 @@
+# web-automate 安定版41d0cedへの戻し方
+
+## 既存リポジトリがある場合（検証環境用）
+
+1. リポジトリディレクトリに移動
+   cd web-automate
+
+2. 現在の状態確認
+   git branch
+   git status
+
+3. 強制的に安定版に同期
+   git fetch origin
+   git checkout master
+   git reset --hard origin/master
+
+4. 確認（必ず41d0cedが表示されること）
+   git log --oneline -3
+   git rev-parse HEAD
+
+5. 動作テスト
+   python gradio_gui.py
+
+
+## 新規環境の場合
+
+1. リポジトリクローン
+   git clone git@github.com:pcparts001/web-automate.git
+   cd web-automate
+
+2. 確認（必ず41d0cedが表示されること）
+   git log --oneline -3
+
+3. 依存関係インストール
+   pip install -r requirements.txt
+
+4. 動作テスト
+   python gradio_gui.py
+
+
+## 確認事項
+
+# コミットハッシュが正しいことを確認
+git rev-parse HEAD
+# 出力: 41d0ced1929b5f3f561c9e6be760988a2fcd9326
+
+# ファイル一覧確認
+ls -la *.py
+# main.py, gradio_gui.py があること
+# prompt_list_editor.py は存在しないこと
+
+# 最新コミットメッセージ確認
+git log -1 --oneline
+# 出力: 41d0ced fix: Correct timeout to 300s and eliminate duplicate file saves
+
+
+## 重要な注意事項
+
+- 安定版41d0cedにはprompt_list_editor.pyは含まれていません
+- この版ではGradioエラーは発生しません
+- 全ての環境でコミットハッシュが41d0ced1929b5f3f561c9e6be760988a2fcd9326になることを確認してください
+
+## トラブルシューティング
+
+もしエラーが出る場合：
+git stash
+git checkout master
+git reset --hard origin/master
+
+強制的にクリーンな状態にする場合：
+git clean -fd
+git reset --hard origin/master
