@@ -644,7 +644,8 @@ def create_main_tab(gui):
             
             with gr.Row():
                 start_btn = gr.Button("🚀 プロンプト送信", variant="primary")
-                stop_btn = gr.Button("🛑 停止", variant="stop")
+                prompt_stop_btn = gr.Button("⏸️ プロンプト停止", variant="secondary")
+                stop_btn = gr.Button("🛑 完全停止", variant="stop")
         
         with gr.Column(scale=2):
             status_display = gr.Textbox(label="📊 ツールステータス", value="待機中", interactive=False)
@@ -657,6 +658,7 @@ def create_main_tab(gui):
         outputs=[status_display, response_display, status_display]
     )
     
+    prompt_stop_btn.click(fn=gui.stop_prompt_only, outputs=[status_display, status_display])
     stop_btn.click(fn=gui.stop_automation, outputs=[status_display, status_display])
     
     # プロンプトフローボタンのイベント
