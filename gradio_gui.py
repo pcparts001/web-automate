@@ -179,6 +179,12 @@ class AutomationGUI:
         
         return result_msg, self.get_unified_list_display()
     
+    # Stage 3: プロンプトセット管理メソッド（UIなし）
+    def get_prompt_set_names(self):
+        """利用可能なプロンプトセット名のリストを取得（テスト用）"""
+        # 現在は単一セットのみ対応
+        return ["デフォルト"]
+    
     def get_random_prompt(self, prompt_type, fallback_prompt):
         """リストからランダムプロンプトを取得"""
         use_list_key = f"use_list_{prompt_type}"
