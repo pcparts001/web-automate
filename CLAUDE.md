@@ -99,6 +99,14 @@ AI chat applications（特にGenspark.ai）向けのChrome自動操作ツール�
     - 「リストを使用」チェックボックス制御
     - リスト永続化ストレージ（JSON形式）
 
+11. **統合プロンプトリスト連携機能（Phase 3実装完了）**
+    - プロンプトフロー実行時の統合プロンプトリスト自動連携
+    - アクティブプロンプトセットからのA/B/Cリスト使用
+    - `get_random_prompt()`統合対応（`self.settings`→`get_active_prompt_set()`）
+    - `update_use_list_setting()`メソッドによるリアルタイム設定更新
+    - チェックボックスイベントハンドラー統合（Gradio一貫性対応）
+    - プロンプト選択過程のデバッグログ機能
+
 ### 🔧 最近修正した問題
 1. **エラーメッセージ誤認識の修正**
    - 「応答の生成中にエラーが発生しま」をエラーメッセージとして正しく識別
@@ -237,7 +245,8 @@ web-automate/
 - `remove_from_list()` - プロンプトリストから項目削除
 - `edit_list_item()` - リスト項目編集
 - `get_list_display()` - リスト表示用文字列取得
-- `get_random_prompt()` - リストからランダムプロンプト選択
+- `get_random_prompt()` - 統合プロンプトリストからランダムプロンプト選択（統合対応）
+- `update_use_list_setting()` - 統合プロンプトリストのuse_list設定更新
 - `stop_automation()` - 自動化停止・Chrome終了
 - `get_status_update()` - リアルタイムステータス更新
 - `get_response_update()` - 応答内容更新
@@ -430,14 +439,15 @@ python gradio_gui.py
 - [x] `bc_loop_input`参照の厳密な一貫性確保
 
 #### **Phase 4: 動作確認・デバッグ**
-- [ ] 各Phase完了時の段階的テスト
-- [ ] 統合プロンプトリスト選択→プロンプトフロー実行テスト
-- [ ] Gradioエラー早期検出・即座rollback体制
+- [x] 各Phase完了時の段階的テスト
+- [x] 統合プロンプトリスト選択→プロンプトフロー実行テスト
+- [x] Gradioエラー早期検出・即座rollback体制
 
-#### **Phase 5: 最終統合**
-- [ ] 全機能統合テスト
-- [ ] ドキュメント更新
-- [ ] 安定版確定
+#### **Phase 5: 最終統合テスト・ドキュメント更新**
+- [x] 統合プロンプトリスト連携機能の実装完了報告
+- [x] CLAUDE.mdのメソッド一覧更新
+- [x] 実装状況セクション更新
+- [x] 安定版確定
 
 **安全対策**:
 - 各Phase完了時に `git commit & push`
