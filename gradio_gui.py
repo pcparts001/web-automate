@@ -1134,8 +1134,9 @@ def create_prompt_list_tab(gui, bc_loop_input=None):
                 choices=gui.get_prompt_set_names(),
                 value=gui.settings.get("active_prompt_set", "デフォルト"),
                 label="セット選択",
-                scale=1
+                scale=2
             )
+            refresh_button = gr.Button("🔄 更新", scale=1)
         
         # Stage 7a: プロンプトセット作成機能
         gr.Markdown("### ➕ 新しいプロンプトセット作成")
@@ -1365,16 +1366,14 @@ def create_prompt_list_tab(gui, bc_loop_input=None):
             outputs=[create_set_result, current_set_display, unified_list_display, list_a_display, list_b_display, list_c_display, new_set_name]
         )
         
-        # Stage 9b: Dropdown選択肢の定期更新
+        # Stage 9b: Dropdown選択肢の手動更新
         def update_dropdown_choices():
             """Dropdown選択肢とアクティブセット表示を更新"""
             current_choices = gui.get_prompt_set_names()
             current_active = gui.settings.get("active_prompt_set", "デフォルト")
-            return gr.update(choices=current_choices), current_active
-        
-        # 定期更新タイマー（5秒間隔）
-        dropdown_timer = gr.Timer(value=5)
-        dropdown_timer.tick(
+            return gr.update(choices=current_choices, value=current_active), current_active
+
+        refresh_button.click(
             fn=update_dropdown_choices,
             outputs=[set_selector, current_set_display]
         )
