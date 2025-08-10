@@ -111,13 +111,31 @@ AI chat applications（特にGenspark.ai）向けのChrome自動操作ツール�
       - 複数行テキスト対応・変数形式検証
     
     - **Phase 2**: GUI実装（CLAUDE.md整合性対応版）
-      - テンプレート変数表示セクション（読み取り専用）
-      - 変数追加機能: variable_name_input, variable_value_input, add_variable_btn
-      - 変数削除機能: delete_variable_name, delete_variable_btn
-      - CRUD操作メソッド: `add_template_variable()`, `delete_template_variable()`
-      - **Gradio Numberコンポーネント参照整合性完全対応**
-      - 全イベントハンドラーで`bc_loop_input`参照統一（一貫性の原則）
-      - フォールバック処理改善（tool未初期化時の直接ファイル操作）
+      - **Stage 1**: 基本テンプレート変数セクション
+        - テンプレート変数表示セクション（読み取り専用）
+        - `template_variables_display`, `refresh_variables_btn`
+        - `get_template_variables_display()`, `refresh_template_variables()`
+      
+      - **Stage 2**: 変数CRUD操作機能
+        - 変数追加機能: `variable_name_input`, `variable_value_input`, `add_variable_btn`
+        - 変数削除機能: `delete_variable_name`, `delete_variable_btn`
+        - CRUD操作メソッド: `add_template_variable()`, `delete_template_variable()`
+        - 変数名形式検証（英数字・アンダースコア）・重複チェック
+        - 複数行テキスト対応・入力フィールド自動クリア機能
+      
+      - **Stage 3**: 動的変数検出機能
+        - 変数自動検出: `detect_source_input`, `extract_variables_btn`
+        - 検出結果表示: `detected_variables_display`
+        - 一括変数作成: `auto_create_variables_btn`
+        - `extract_variables_from_text()`, `create_detected_variables()`
+        - 既存変数スキップ機能・作成結果詳細レポート
+        - `{変数名}`形式の自動検出・パース機能
+      
+      - **共通安全対策**:
+        - **Gradio Numberコンポーネント参照整合性完全対応**
+        - 全イベントハンドラーで`bc_loop_input`参照統一（一貫性の原則）
+        - フォールバック処理改善（tool未初期化時の直接ファイル操作）
+        - 段階的実装でエラー箇所特定可能・既存機能との競合回避
 
 ### 🔧 最近修正した問題
 1. **エラーメッセージ誤認識の修正**
@@ -276,6 +294,8 @@ web-automate/
   - `add_template_variable()` - 変数追加（形式検証付き）
   - `delete_template_variable()` - 変数削除（存在確認付き）
   - `extract_variables_from_prompt()` - プロンプトから変数抽出
+  - `extract_variables_from_text()` - テキストから変数を抽出し表示用文字列で返す
+  - `create_detected_variables()` - 検出した変数を一括作成（重複チェック付き）
 
 ### 🚀 使用方法
 
@@ -316,6 +336,16 @@ python gradio_gui.py
 4. ✏️編集: インデックス指定でリスト項目を編集
 5. 🗑️削除: インデックス指定でリスト項目を削除
 6. メインタブで「リストを使用」ON時、ランダム選択実行
+
+**テンプレート変数機能（2025-08-10新機能）**:
+1. **変数設定**: 「📋 テンプレート変数」セクションで変数を管理
+2. **変数追加**: 変数名（例: name, topic）と変数値を入力して「➕ 追加」
+3. **変数削除**: 削除したい変数名を入力して「🗑️ 削除」
+4. **動的検出**: プロンプトテキストを入力して「🔍 変数を検出」
+5. **一括作成**: 検出された変数を「🚀 検出した変数を一括作成」
+6. **自動置換**: プロンプト送信時に`{変数名}`が自動的に変数値に置換
+   - 例: `「こんにちは{name}さん」` → `「こんにちはJohn Smithさん」`
+7. **複数行対応**: 変数値に改行を含む複数行テキストを設定可能
 
 ### 🛠️ 技術的な課題と解決策
 

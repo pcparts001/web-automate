@@ -95,7 +95,7 @@ class ChromeAutomationTool:
         return unique_variables
 
     def replace_template_variables(self, prompt_text):
-        """プロンプトテキスト内の変数を実際の値に置換する"""
+        """プロンプトテキスト内の変数を実際の値に置換する（配列対応・ランダム選択機能）"""
         if not prompt_text:
             return prompt_text
         
@@ -109,12 +109,22 @@ class ChromeAutomationTool:
         original_text = prompt_text
         replaced_text = prompt_text
         
-        # 各変数を置換
+        # 各変数を置換（配列対応・ランダム選択機能）
         for var_name, var_value in variables.items():
             placeholder = f"{{{var_name}}}"
             if placeholder in replaced_text:
-                replaced_text = replaced_text.replace(placeholder, str(var_value))
-                self.logger.debug(f"変数 '{var_name}' を置換しました")
+                # 配列の場合はランダムに選択、文字列の場合はそのまま使用
+                if isinstance(var_value, list):
+                    if len(var_value) > 0:
+                        selected_value = random.choice(var_value)
+                        replaced_text = replaced_text.replace(placeholder, str(selected_value))
+                        self.logger.debug(f"変数 '{var_name}' を配列からランダム選択して置換: '{selected_value}' (候補数: {len(var_value)})")
+                    else:
+                        self.logger.warning(f"変数 '{var_name}' は空の配列です")
+                else:
+                    # 従来の文字列形式（後方互換性）
+                    replaced_text = replaced_text.replace(placeholder, str(var_value))
+                    self.logger.debug(f"変数 '{var_name}' を置換しました")
         
         # 置換が実行されたかログ出力
         if original_text != replaced_text:
