@@ -56,6 +56,14 @@ class AutomationGUI:
         """ChromeAutomationToolからテンプレート変数を取得"""
         if self.tool:
             return self.tool.load_template_variables()
+        # フォールバック: 直接ファイルから読み込み
+        try:
+            import os
+            if os.path.exists("template_variables.json"):
+                with open("template_variables.json", 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception:
+            pass
         return {}
     
     def save_template_variables_to_tool(self, variables):
@@ -105,6 +113,54 @@ class AutomationGUI:
     def refresh_template_variables(self):
         """テンプレート変数表示を更新"""
         return self.get_template_variables_display()
+    
+    def add_template_variable(self, var_name, var_value):
+        """テンプレート変数を追加"""
+        # 入力値検証
+        if not var_name or not var_name.strip():
+            return "❌ 変数名を入力してください", False
+        
+        var_name = var_name.strip()
+        
+        # 変数名の形式チェック（英数字とアンダースコアのみ）
+        import re
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', var_name):
+            return "❌ 変数名は英文字・数字・アンダースコアのみ使用可能です", False
+        
+        # 既存変数を読み込み
+        variables = self.get_template_variables_from_tool()
+        
+        # 変数を追加
+        variables[var_name] = var_value if var_value is not None else ""
+        
+        # 保存
+        if self.save_template_variables_to_tool(variables):
+            return f"✅ 変数 '{var_name}' を追加しました", True
+        else:
+            return "❌ 変数の保存に失敗しました", False
+    
+    def delete_template_variable(self, var_name):
+        """テンプレート変数を削除"""
+        # 入力値検証
+        if not var_name or not var_name.strip():
+            return "❌ 削除する変数名を入力してください", False
+        
+        var_name = var_name.strip()
+        
+        # 既存変数を読み込み
+        variables = self.get_template_variables_from_tool()
+        
+        if var_name not in variables:
+            return f"❌ 変数 '{var_name}' は存在しません", False
+        
+        # 変数を削除
+        del variables[var_name]
+        
+        # 保存
+        if self.save_template_variables_to_tool(variables):
+            return f"✅ 変数 '{var_name}' を削除しました", True
+        else:
+            return "❌ 変数の保存に失敗しました", False
     
     def load_settings(self):
         """設定ファイルから設定をロード（prompt_sets構造対応）"""
@@ -1083,6 +1139,38 @@ def create_main_tab(gui):
             # 変数管理用の更新ボタン
             refresh_variables_btn = gr.Button("🔄 変数リスト更新", variant="secondary")
             
+            # Stage2: 変数追加機能（CLAUDE.md整合性対応）
+            gr.Markdown("#### 🆕 変数追加")
+            with gr.Row():
+                variable_name_input = gr.Textbox(
+                    label="変数名", 
+                    placeholder="例: name, topic",
+                    scale=1
+                )
+                variable_value_input = gr.Textbox(
+                    label="変数値", 
+                    lines=3,
+                    placeholder="例: John\nSmith（複数行可）",
+                    scale=2
+                )
+                add_variable_btn = gr.Button("➕ 追加", variant="primary", scale=1)
+            
+            # Stage2: 変数削除機能
+            with gr.Row():
+                delete_variable_name = gr.Textbox(
+                    label="削除する変数名", 
+                    placeholder="削除したい変数名を入力",
+                    scale=2
+                )
+                delete_variable_btn = gr.Button("🗑️ 削除", variant="stop", scale=1)
+            
+            # 操作結果表示
+            variable_operation_result = gr.Textbox(
+                label="操作結果", 
+                interactive=False,
+                visible=False
+            )
+            
             # Phase1: 複数プロンプト機能
             gr.Markdown("### 🔄 プロンプトフロー機能")
             
@@ -1129,10 +1217,52 @@ def create_main_tab(gui):
     prompt_stop_btn.click(fn=gui.stop_prompt_only, outputs=[status_display, status_display])
     stop_btn.click(fn=gui.stop_automation, outputs=[status_display, status_display])
     
-    # Phase2 Stage1: テンプレート変数のイベントハンドラー
+    # Phase2 Stage1-2: テンプレート変数のイベントハンドラー（CLAUDE.md整合性対応）
     refresh_variables_btn.click(
-        fn=gui.refresh_template_variables,
+        fn=lambda bc_count: gui.refresh_template_variables(),
+        inputs=[bc_loop_input],  # Numberコンポーネント参照整合性のため必須
         outputs=[template_variables_display]
+    )
+    
+    # Stage2: 変数追加のイベントハンドラー（Gradio Number参照整合性対応）
+    def handle_add_variable(var_name, var_value, bc_count):
+        """変数追加処理（bc_countは参照整合性のため必須）"""
+        result_message, success = gui.add_template_variable(var_name, var_value)
+        updated_display = gui.refresh_template_variables()
+        return (
+            updated_display,  # template_variables_display更新
+            result_message,   # variable_operation_result表示
+            "" if success else var_name,  # variable_name_inputクリア
+            "" if success else var_value  # variable_value_inputクリア
+        )
+    
+    add_variable_btn.click(
+        fn=handle_add_variable,
+        inputs=[variable_name_input, variable_value_input, bc_loop_input],  # bc_loop_input必須
+        outputs=[template_variables_display, variable_operation_result, variable_name_input, variable_value_input]
+    ).then(
+        fn=lambda: gr.update(visible=True),
+        outputs=[variable_operation_result]
+    )
+    
+    # Stage2: 変数削除のイベントハンドラー（Gradio Number参照整合性対応）
+    def handle_delete_variable(var_name, bc_count):
+        """変数削除処理（bc_countは参照整合性のため必須）"""
+        result_message, success = gui.delete_template_variable(var_name)
+        updated_display = gui.refresh_template_variables()
+        return (
+            updated_display,  # template_variables_display更新
+            result_message,   # variable_operation_result表示
+            "" if success else var_name  # delete_variable_nameクリア
+        )
+    
+    delete_variable_btn.click(
+        fn=handle_delete_variable,
+        inputs=[delete_variable_name, bc_loop_input],  # bc_loop_input必須
+        outputs=[template_variables_display, variable_operation_result, delete_variable_name]
+    ).then(
+        fn=lambda: gr.update(visible=True),
+        outputs=[variable_operation_result]
     )
     
     # プロンプトフローボタンのイベント
