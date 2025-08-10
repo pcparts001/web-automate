@@ -77,6 +77,110 @@ class AutomationGUI:
             return True
         except Exception:
             return False
+
+    def add_candidate_to_variable(self, var_name, candidate_value):
+        """変数に候補を追加（候補別管理用）"""
+        if not var_name or not var_name.strip():
+            return "❌ 変数名を入力してください", False
+        
+        # 変数名の形式チェック
+        import re
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', var_name):
+            return "❌ 変数名は英文字・数字・アンダースコアのみ使用可能です", False
+        
+        # 既存変数を読み込み
+        variables = self.get_template_variables_from_tool()
+        
+        if var_name in variables:
+            # 既存変数の場合
+            if isinstance(variables[var_name], list):
+                # 既に配列の場合は候補を追加
+                variables[var_name].append(candidate_value)
+            else:
+                # 単一値の場合は配列に変換してから追加
+                variables[var_name] = [variables[var_name], candidate_value]
+        else:
+            # 新しい変数の場合は候補が1つなら文字列、複数なら配列として作成
+            variables[var_name] = candidate_value
+        
+        # 保存
+        if self.save_template_variables_to_tool(variables):
+            return f"✅ 変数 '{var_name}' に候補を追加しました", True
+        else:
+            return "❌ 変数の保存に失敗しました", False
+
+    def remove_candidate_from_variable(self, var_name, candidate_index):
+        """変数から指定インデックスの候補を削除"""
+        if not var_name or not var_name.strip():
+            return "❌ 変数名を入力してください", False
+        
+        try:
+            candidate_index = int(candidate_index)
+        except (ValueError, TypeError):
+            return "❌ 候補番号は数値で入力してください", False
+        
+        # 既存変数を読み込み
+        variables = self.get_template_variables_from_tool()
+        
+        if var_name not in variables:
+            return f"❌ 変数 '{var_name}' が存在しません", False
+        
+        if isinstance(variables[var_name], list):
+            # 配列の場合
+            if candidate_index < 0 or candidate_index >= len(variables[var_name]):
+                return f"❌ 候補番号が範囲外です (0-{len(variables[var_name])-1})", False
+            
+            removed_value = variables[var_name][candidate_index]
+            variables[var_name].pop(candidate_index)
+            
+            # 候補が1つになった場合は文字列に変換
+            if len(variables[var_name]) == 1:
+                variables[var_name] = variables[var_name][0]
+            # 候補が0になった場合は変数を削除
+            elif len(variables[var_name]) == 0:
+                del variables[var_name]
+                
+        else:
+            # 単一値の場合（インデックス0のみ有効）
+            if candidate_index != 0:
+                return "❌ 単一値変数の場合、候補番号は0のみ有効です", False
+            removed_value = variables[var_name]
+            del variables[var_name]
+        
+        # 保存
+        if self.save_template_variables_to_tool(variables):
+            return f"✅ 変数 '{var_name}' の候補を削除しました", True
+        else:
+            return "❌ 変数の保存に失敗しました", False
+
+    def get_variable_candidates_display(self, var_name):
+        """指定変数の候補一覧を表示用文字列として取得"""
+        if not var_name or not var_name.strip():
+            return "変数名を指定してください"
+        
+        variables = self.get_template_variables_from_tool()
+        
+        if var_name not in variables:
+            return f"変数 '{var_name}' は存在しません"
+        
+        var_value = variables[var_name]
+        if isinstance(var_value, list):
+            if len(var_value) == 0:
+                return "候補がありません"
+            
+            display_lines = []
+            for i, candidate in enumerate(var_value):
+                candidate_str = str(candidate).replace('\n', '\\n')
+                if len(candidate_str) > 50:
+                    candidate_str = candidate_str[:50] + "..."
+                display_lines.append(f"{i}: {candidate_str}")
+            
+            return "\n".join(display_lines)
+        else:
+            candidate_str = str(var_value).replace('\n', '\\n')
+            if len(candidate_str) > 50:
+                candidate_str = candidate_str[:50] + "..."
+            return f"0: {candidate_str}"
     
     def extract_variables_from_prompt(self, prompt_text):
         """プロンプトテキストから変数を抽出（toolがある場合はtoolの機能を使用）"""

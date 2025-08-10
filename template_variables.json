@@ -1,7 +1,21 @@
 {
-  "name": ["John Smith", "Steve Adam", "Alice Johnson"],
-  "topic": ["AI技術", "機械学習", "深層学習"],
+  "name": [
+    "John Smith",
+    "Alice Johnson",
+    "John\nSmith",
+    "Steve Adam",
+    "Alice Johnson"
+  ],
+  "topic": [
+    "AI技術",
+    "機械学習",
+    "深層学習"
+  ],
   "greeting": "こんにちは",
   "weather": "",
-  "mood": ["元気", "普通", "疲れ気味"]
+  "mood": [
+    "元気",
+    "普通",
+    "疲れ気味"
+  ]
 }
