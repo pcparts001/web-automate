@@ -1359,6 +1359,54 @@ def create_main_tab(gui):
                 placeholder="変数検出結果がここに表示されます..."
             )
             
+            # Stage2B: 候補別管理GUI機能（CLAUDE.md整合性対応）
+            gr.Markdown("#### 📋 候補別管理")
+            
+            # 候補管理対象変数選択
+            manage_variable_name = gr.Textbox(
+                label="管理対象変数名", 
+                placeholder="候補を管理したい変数名を入力",
+                scale=1
+            )
+            
+            # 候補一覧表示
+            variable_candidates_display = gr.Textbox(
+                label="変数の候補一覧", 
+                lines=4,
+                interactive=False,
+                placeholder="変数名を入力後「候補表示」をクリックすると候補が表示されます"
+            )
+            
+            # 候補表示ボタン
+            show_candidates_btn = gr.Button("👁️ 候補表示", variant="secondary")
+            
+            # 候補追加機能
+            with gr.Row():
+                candidate_value_input = gr.Textbox(
+                    label="追加する候補値", 
+                    lines=3,
+                    placeholder="追加したい候補値を入力（複数行可）",
+                    scale=2
+                )
+                add_candidate_btn = gr.Button("➕ 候補追加", variant="primary", scale=1)
+            
+            # 候補削除機能
+            with gr.Row():
+                candidate_index_input = gr.Number(
+                    label="削除する候補番号", 
+                    value=0,
+                    minimum=0,
+                    scale=1
+                )
+                remove_candidate_btn = gr.Button("🗑️ 候補削除", variant="stop", scale=1)
+            
+            # 候補管理結果表示
+            candidate_operation_result = gr.Textbox(
+                label="候補管理結果", 
+                interactive=False,
+                visible=False
+            )
+            
             # Phase1: 複数プロンプト機能
             gr.Markdown("### 🔄 プロンプトフロー機能")
             
@@ -1472,6 +1520,70 @@ def create_main_tab(gui):
     ).then(
         fn=lambda: gr.update(visible=True),
         outputs=[variable_operation_result]
+    )
+    
+    # Stage2B: 候補別管理のイベントハンドラー（Gradio Number参照整合性対応）
+    def handle_show_candidates(var_name, bc_count):
+        """候補表示処理（bc_countは参照整合性のため必須）"""
+        if not var_name or not var_name.strip():
+            return "❌ 変数名を入力してください"
+        return gui.get_variable_candidates_display(var_name.strip())
+    
+    show_candidates_btn.click(
+        fn=handle_show_candidates,
+        inputs=[manage_variable_name, bc_loop_input],  # bc_loop_input必須（整合性保証）
+        outputs=[variable_candidates_display]
+    )
+    
+    def handle_add_candidate(var_name, candidate_value, bc_count):
+        """候補追加処理（bc_countは参照整合性のため必須）"""
+        if not var_name or not var_name.strip():
+            return "❌ 変数名を入力してください", "", "", ""
+        if not candidate_value or not candidate_value.strip():
+            return "❌ 候補値を入力してください", "", "", ""
+        
+        result_message, success = gui.add_candidate_to_variable(var_name.strip(), candidate_value)
+        candidates_display = gui.get_variable_candidates_display(var_name.strip())
+        updated_template_display = gui.refresh_template_variables()
+        
+        return (
+            result_message,  # candidate_operation_result表示
+            candidates_display,  # variable_candidates_display更新
+            "" if success else candidate_value,  # candidate_value_inputクリア
+            updated_template_display  # template_variables_display更新
+        )
+    
+    add_candidate_btn.click(
+        fn=handle_add_candidate,
+        inputs=[manage_variable_name, candidate_value_input, bc_loop_input],  # bc_loop_input必須
+        outputs=[candidate_operation_result, variable_candidates_display, candidate_value_input, template_variables_display]
+    ).then(
+        fn=lambda: gr.update(visible=True),
+        outputs=[candidate_operation_result]
+    )
+    
+    def handle_remove_candidate(var_name, candidate_index, bc_count):
+        """候補削除処理（bc_countは参照整合性のため必須）"""
+        if not var_name or not var_name.strip():
+            return "❌ 変数名を入力してください", "", ""
+        
+        result_message, success = gui.remove_candidate_from_variable(var_name.strip(), candidate_index)
+        candidates_display = gui.get_variable_candidates_display(var_name.strip())
+        updated_template_display = gui.refresh_template_variables()
+        
+        return (
+            result_message,  # candidate_operation_result表示
+            candidates_display,  # variable_candidates_display更新
+            updated_template_display  # template_variables_display更新
+        )
+    
+    remove_candidate_btn.click(
+        fn=handle_remove_candidate,
+        inputs=[manage_variable_name, candidate_index_input, bc_loop_input],  # bc_loop_input必須
+        outputs=[candidate_operation_result, variable_candidates_display, template_variables_display]
+    ).then(
+        fn=lambda: gr.update(visible=True),
+        outputs=[candidate_operation_result]
     )
     
     # プロンプトフローボタンのイベント
