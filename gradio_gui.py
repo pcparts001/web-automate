@@ -1255,17 +1255,6 @@ class AutomationGUI:
         except queue.Empty:
             return ""
 
-def handle_template_variable_add(gui, var_name, var_value):
-    """テンプレート変数タブ用変数追加処理（グローバル関数でスコープ問題回避）"""
-    result_message, success = gui.add_template_variable(var_name, var_value)
-    updated_display = gui.refresh_template_variables()
-    return (
-        updated_display,  # template_variables_display更新
-        result_message,   # variable_operation_result表示
-        "" if success else var_name,  # variable_name_inputクリア
-        "" if success else var_value  # variable_value_inputクリア
-    )
-
 def create_interface():
     """Gradioインターフェースを作成"""
     gui = AutomationGUI()
@@ -2014,11 +2003,21 @@ def create_template_variables_tab(gui):
             outputs=[template_variables_display]
         )
         
-        # Stage 2C: 変数追加イベントハンドラー（Gradioスコープ問題修正）
-        # CLAUDE.mdの教訓: タブ内での関数定義はスコープ問題を起こす可能性
+        # Stage 2C: 変数追加イベントハンドラー（CLAUDE.md整合性対応）
+        def handle_add_variable_template(var_name, var_value, bc_count):
+            """変数追加処理（テンプレート変数タブ用、bc_countは参照整合性のため必須）"""
+            result_message, success = gui.add_template_variable(var_name, var_value)
+            updated_display = gui.refresh_template_variables()
+            return (
+                updated_display,  # template_variables_display更新
+                result_message,   # variable_operation_result表示
+                "" if success else var_name,  # variable_name_inputクリア
+                "" if success else var_value  # variable_value_inputクリア
+            )
+        
         add_variable_btn.click(
-            fn=lambda var_name, var_value, bc_count: handle_template_variable_add(gui, var_name, var_value),
-            inputs=[variable_name_input, variable_value_input, bc_loop_input_template],
+            fn=handle_add_variable_template,
+            inputs=[variable_name_input, variable_value_input, bc_loop_input_template],  # bc_loop_input_template必須
             outputs=[template_variables_display, variable_operation_result, variable_name_input, variable_value_input]
         ).then(
             fn=lambda: gr.update(visible=True),
