@@ -1967,11 +1967,62 @@ def create_template_variables_tab(gui):
         # Stage 1C: 基本的な更新ボタン（イベントハンドラーなし）
         refresh_variables_btn = gr.Button("🔄 変数リスト更新", variant="secondary")
         
-        # Stage 1C: プレースホルダー（残りの機能は次のStageで移動）
+        # Stage 2B: 変数追加機能UIを移動
+        gr.Markdown("### ➕ 変数追加")
+        with gr.Row():
+            variable_name_input = gr.Textbox(
+                label="変数名", 
+                placeholder="例: name, topic",
+                scale=1
+            )
+            variable_value_input = gr.Textbox(
+                label="変数値", 
+                lines=3,
+                placeholder="例: John\nSmith（複数行可）",
+                scale=2
+            )
+            add_variable_btn = gr.Button("➕ 追加", variant="primary", scale=1)
+        
+        # 操作結果表示（変数追加用）
+        variable_operation_result = gr.Textbox(
+            label="操作結果", 
+            interactive=False,
+            visible=False
+        )
+        
+        # Stage 2B: プレースホルダー（残りの機能は次のStageで移動）
         gr.Markdown("### 🚧 次のStageで実装予定")
-        gr.Markdown("- 変数追加・削除機能")
+        gr.Markdown("- 変数削除機能")
         gr.Markdown("- 動的変数検出機能") 
         gr.Markdown("- 候補別管理機能")
+        
+        # Stage 2A: 基本イベントハンドラー追加（CLAUDE.md整合性対応）
+        refresh_variables_btn.click(
+            fn=lambda bc_count: gui.refresh_template_variables(),
+            inputs=[bc_loop_input_template],  # Numberコンポーネント参照整合性確保
+            outputs=[template_variables_display]
+        )
+        
+        # Stage 2C: 変数追加イベントハンドラー（CLAUDE.md整合性対応）
+        def handle_add_variable_template(var_name, var_value, bc_count):
+            """変数追加処理（テンプレート変数タブ用、bc_countは参照整合性のため必須）"""
+            result_message, success = gui.add_template_variable(var_name, var_value)
+            updated_display = gui.refresh_template_variables()
+            return (
+                updated_display,  # template_variables_display更新
+                result_message,   # variable_operation_result表示
+                "" if success else var_name,  # variable_name_inputクリア
+                "" if success else var_value  # variable_value_inputクリア
+            )
+        
+        add_variable_btn.click(
+            fn=handle_add_variable_template,
+            inputs=[variable_name_input, variable_value_input, bc_loop_input_template],  # bc_loop_input_template必須
+            outputs=[template_variables_display, variable_operation_result, variable_name_input, variable_value_input]
+        ).then(
+            fn=lambda: gr.update(visible=True),
+            outputs=[variable_operation_result]
+        )
         
         # Stage 1B: bc_loop_input_templateを戻り値として返す（将来のイベントハンドラー用）
         return bc_loop_input_template
