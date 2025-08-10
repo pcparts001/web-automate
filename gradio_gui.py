@@ -89,24 +89,43 @@ class AutomationGUI:
         return list(set(variables))
     
     def get_template_variables_display(self):
-        """テンプレート変数を表示用文字列として取得"""
+        """テンプレート変数を表示用文字列として取得（配列対応）"""
         variables = self.get_template_variables_from_tool()
         if not variables:
             return "変数が登録されていません"
         
         display_lines = []
         for var_name, var_value in variables.items():
-            # 複数行の場合は改行を表示
-            if '\n' in str(var_value):
-                value_preview = str(var_value).replace('\n', '\\n')
-                if len(value_preview) > 50:
-                    value_preview = value_preview[:50] + "..."
+            if isinstance(var_value, list):
+                # 配列の場合
+                if len(var_value) == 0:
+                    display_lines.append(f"{var_name}: [空の配列]")
+                else:
+                    candidates_preview = []
+                    for item in var_value:
+                        item_str = str(item).replace('\n', '\\n')
+                        if len(item_str) > 30:
+                            item_str = item_str[:30] + "..."
+                        candidates_preview.append(item_str)
+                    
+                    if len(candidates_preview) > 3:
+                        preview_text = ", ".join(candidates_preview[:3]) + f", ... (計{len(var_value)}個)"
+                    else:
+                        preview_text = ", ".join(candidates_preview)
+                    
+                    display_lines.append(f"{var_name}: [{preview_text}]")
             else:
-                value_preview = str(var_value)
-                if len(value_preview) > 50:
-                    value_preview = value_preview[:50] + "..."
-            
-            display_lines.append(f"{var_name}: {value_preview}")
+                # 単一値の場合（従来の処理）
+                if '\n' in str(var_value):
+                    value_preview = str(var_value).replace('\n', '\\n')
+                    if len(value_preview) > 50:
+                        value_preview = value_preview[:50] + "..."
+                else:
+                    value_preview = str(var_value)
+                    if len(value_preview) > 50:
+                        value_preview = value_preview[:50] + "..."
+                
+                display_lines.append(f"{var_name}: {value_preview}")
         
         return "\n".join(display_lines)
     
