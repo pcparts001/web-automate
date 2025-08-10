@@ -1956,7 +1956,7 @@ def create_template_variables_tab(gui):
         # Stage 1C: 基本テンプレート変数表示UI（読み取り専用）
         gr.Markdown("### 📋 現在の変数一覧")
         
-        template_variables_display = gr.Textbox(
+        template_variables_display_tmpl = gr.Textbox(
             label="現在の変数一覧", 
             lines=6, 
             value=gui.get_template_variables_display(),
@@ -1964,14 +1964,64 @@ def create_template_variables_tab(gui):
             placeholder="変数が登録されていません"
         )
         
-        # Stage 1C: 基本的な更新ボタン（イベントハンドラーなし）
-        refresh_variables_btn = gr.Button("🔄 変数リスト更新", variant="secondary")
+        refresh_variables_btn_tmpl = gr.Button("🔄 変数リスト更新", variant="secondary")
         
-        # Stage 1C: プレースホルダー（残りの機能は次のStageで移動）
+        # Stage 2再実装: 変数追加UI（独立命名で重複回避）
+        gr.Markdown("### ➕ 変数追加")
+        with gr.Row():
+            variable_name_input_tmpl = gr.Textbox(
+                label="変数名", 
+                placeholder="例: name, topic",
+                scale=1
+            )
+            variable_value_input_tmpl = gr.Textbox(
+                label="変数値", 
+                lines=3,
+                placeholder="例: John\nSmith（複数行可）",
+                scale=2
+            )
+            add_variable_btn_tmpl = gr.Button("➕ 追加", variant="primary", scale=1)
+        
+        variable_operation_result_tmpl = gr.Textbox(
+            label="操作結果", 
+            interactive=False,
+            visible=False
+        )
+        
+        # Stage 2再実装: プレースホルダー（残りの機能は次のStageで移動）
         gr.Markdown("### 🚧 次のStageで実装予定")
-        gr.Markdown("- 変数追加・削除機能")
+        gr.Markdown("- 変数削除機能")
         gr.Markdown("- 動的変数検出機能") 
         gr.Markdown("- 候補別管理機能")
+        
+        # Stage 2再実装: 成功パターンを複製（メインタブの実装参考）
+        # メインタブのline 1471-1475と同じパターンを適用
+        refresh_variables_btn_tmpl.click(
+            fn=lambda bc_count: gui.refresh_template_variables(),
+            inputs=[bc_loop_input_template],
+            outputs=[template_variables_display_tmpl]
+        )
+        
+        # Stage 2再実装: 変数追加イベントハンドラー（メインタブのパターンを適用）
+        def handle_add_variable_tmpl(var_name, var_value, bc_count):
+            """変数追加処理（テンプレート変数タブ用）"""
+            result_message, success = gui.add_template_variable(var_name, var_value)
+            updated_display = gui.refresh_template_variables()
+            return (
+                updated_display,  # template_variables_display_tmpl更新
+                result_message,   # variable_operation_result_tmpl表示
+                "" if success else var_name,  # variable_name_input_tmplクリア
+                "" if success else var_value  # variable_value_input_tmplクリア
+            )
+        
+        add_variable_btn_tmpl.click(
+            fn=handle_add_variable_tmpl,
+            inputs=[variable_name_input_tmpl, variable_value_input_tmpl, bc_loop_input_template],
+            outputs=[template_variables_display_tmpl, variable_operation_result_tmpl, variable_name_input_tmpl, variable_value_input_tmpl]
+        ).then(
+            fn=lambda: gr.update(visible=True),
+            outputs=[variable_operation_result_tmpl]
+        )
         
         # Stage 1B: bc_loop_input_templateを戻り値として返す（将来のイベントハンドラー用）
         return bc_loop_input_template

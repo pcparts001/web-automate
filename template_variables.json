@@ -22,5 +22,6 @@
   "colors": [
     "赤",
     "緑"
-  ]
+  ],
+  "test_fixed": "fixed_value"
 }
