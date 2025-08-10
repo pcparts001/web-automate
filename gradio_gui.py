@@ -1270,6 +1270,9 @@ def create_interface():
             
             with gr.TabItem("📝 プロンプトリストの編集"):
                 create_prompt_list_tab(gui, bc_loop_input)
+            
+            with gr.TabItem("📋 テンプレート変数"):
+                bc_loop_input_template = create_template_variables_tab(gui)
         
         # リアルタイム更新設定
         interface.load(
@@ -1927,6 +1930,51 @@ def create_prompt_list_tab(gui, bc_loop_input=None):
             outputs=[delete_set_result, set_selector, current_set_display, 
                     unified_list_display, list_a_display, list_b_display, list_c_display]
         )
+
+def create_template_variables_tab(gui):
+    """テンプレート変数タブのコンポーネントを作成（Stage 1B: Numberコンポーネント追加）"""
+    with gr.Column():
+        gr.Markdown("## 📋 テンプレート変数管理")
+        gr.Markdown("プロンプト内の `{変数名}` を自動的に値に置換する機能です")
+        
+        # Stage 1B: Gradio参照整合性確保のため独立Numberコンポーネント作成
+        # CLAUDE.mdの教訓: 同一タブ内の全イベントハンドラーでNumberコンポーネント参照を統一
+        bc_loop_input_template = gr.Number(
+            label="🔄 テンプレート変数タブ用参照（内部用）", 
+            value=0, 
+            visible=False,  # UIに表示しない（参照整合性のためのみ）
+            minimum=0, 
+            maximum=1000
+        )
+        
+        # Stage 1B: 基本構造 - 後続Stageで段階的に機能追加予定
+        gr.Markdown("### 🚧 実装予定機能")
+        gr.Markdown("- 変数一覧表示・追加・削除")
+        gr.Markdown("- 動的変数検出")
+        gr.Markdown("- 候補別管理")
+        
+        # Stage 1C: 基本テンプレート変数表示UI（読み取り専用）
+        gr.Markdown("### 📋 現在の変数一覧")
+        
+        template_variables_display = gr.Textbox(
+            label="現在の変数一覧", 
+            lines=6, 
+            value=gui.get_template_variables_display(),
+            interactive=False,
+            placeholder="変数が登録されていません"
+        )
+        
+        # Stage 1C: 基本的な更新ボタン（イベントハンドラーなし）
+        refresh_variables_btn = gr.Button("🔄 変数リスト更新", variant="secondary")
+        
+        # Stage 1C: プレースホルダー（残りの機能は次のStageで移動）
+        gr.Markdown("### 🚧 次のStageで実装予定")
+        gr.Markdown("- 変数追加・削除機能")
+        gr.Markdown("- 動的変数検出機能") 
+        gr.Markdown("- 候補別管理機能")
+        
+        # Stage 1B: bc_loop_input_templateを戻り値として返す（将来のイベントハンドラー用）
+        return bc_loop_input_template
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
