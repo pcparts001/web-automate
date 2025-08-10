@@ -80,6 +80,32 @@ class AutomationGUI:
         variables = re.findall(pattern, prompt_text)
         return list(set(variables))
     
+    def get_template_variables_display(self):
+        """テンプレート変数を表示用文字列として取得"""
+        variables = self.get_template_variables_from_tool()
+        if not variables:
+            return "変数が登録されていません"
+        
+        display_lines = []
+        for var_name, var_value in variables.items():
+            # 複数行の場合は改行を表示
+            if '\n' in str(var_value):
+                value_preview = str(var_value).replace('\n', '\\n')
+                if len(value_preview) > 50:
+                    value_preview = value_preview[:50] + "..."
+            else:
+                value_preview = str(var_value)
+                if len(value_preview) > 50:
+                    value_preview = value_preview[:50] + "..."
+            
+            display_lines.append(f"{var_name}: {value_preview}")
+        
+        return "\n".join(display_lines)
+    
+    def refresh_template_variables(self):
+        """テンプレート変数表示を更新"""
+        return self.get_template_variables_display()
+    
     def load_settings(self):
         """設定ファイルから設定をロード（prompt_sets構造対応）"""
         print(f"[DEBUG] load_settings() 開始")
@@ -1042,6 +1068,21 @@ def create_main_tab(gui):
             
             fallback_input = gr.Textbox(label="📝 フォールバックメッセージ", lines=2, placeholder="エラー時の代替メッセージ...", visible=True, value=gui.settings.get("fallback_message", ""))
             
+            # Phase2 Stage1: テンプレート変数機能
+            gr.Markdown("### 📋 テンプレート変数")
+            
+            # 現在の変数一覧表示（読み取り専用）
+            template_variables_display = gr.Textbox(
+                label="現在の変数一覧", 
+                lines=4, 
+                value=gui.get_template_variables_display(),
+                interactive=False,
+                placeholder="変数が登録されていません"
+            )
+            
+            # 変数管理用の更新ボタン
+            refresh_variables_btn = gr.Button("🔄 変数リスト更新", variant="secondary")
+            
             # Phase1: 複数プロンプト機能
             gr.Markdown("### 🔄 プロンプトフロー機能")
             
@@ -1087,6 +1128,12 @@ def create_main_tab(gui):
     
     prompt_stop_btn.click(fn=gui.stop_prompt_only, outputs=[status_display, status_display])
     stop_btn.click(fn=gui.stop_automation, outputs=[status_display, status_display])
+    
+    # Phase2 Stage1: テンプレート変数のイベントハンドラー
+    refresh_variables_btn.click(
+        fn=gui.refresh_template_variables,
+        outputs=[template_variables_display]
+    )
     
     # プロンプトフローボタンのイベント
     prompt_flow_btn.click(
