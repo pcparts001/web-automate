@@ -52,6 +52,34 @@ class AutomationGUI:
             print(f"[DEBUG] メモリ内旧キー削除: {keys_removed}")
             print(f"[DEBUG] クリーンアップ後キー一覧: {list(self.settings.keys())}")
     
+    def get_template_variables_from_tool(self):
+        """ChromeAutomationToolからテンプレート変数を取得"""
+        if self.tool:
+            return self.tool.load_template_variables()
+        return {}
+    
+    def save_template_variables_to_tool(self, variables):
+        """ChromeAutomationToolにテンプレート変数を保存"""
+        if self.tool:
+            return self.tool.save_template_variables(variables)
+        # toolがない場合は直接ファイルに保存
+        try:
+            with open("template_variables.json", 'w', encoding='utf-8') as f:
+                json.dump(variables, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception:
+            return False
+    
+    def extract_variables_from_prompt(self, prompt_text):
+        """プロンプトテキストから変数を抽出（toolがある場合はtoolの機能を使用）"""
+        if self.tool:
+            return self.tool.extract_template_variables(prompt_text)
+        # フォールバック処理
+        import re
+        pattern = r'\{([a-zA-Z_][a-zA-Z0-9_]*)\}'
+        variables = re.findall(pattern, prompt_text)
+        return list(set(variables))
+    
     def load_settings(self):
         """設定ファイルから設定をロード（prompt_sets構造対応）"""
         print(f"[DEBUG] load_settings() 開始")
