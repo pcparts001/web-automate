@@ -162,6 +162,52 @@ class AutomationGUI:
         else:
             return "❌ 変数の保存に失敗しました", False
     
+    def extract_variables_from_text(self, text):
+        """テキストから変数を抽出し、結果を表示用文字列で返す"""
+        if not text or not text.strip():
+            return "検出対象テキストを入力してください"
+        
+        variables = self.extract_variables_from_prompt(text)
+        if not variables:
+            return "変数が見つかりませんでした"
+        
+        return f"検出された変数: {', '.join(variables)}"
+    
+    def create_detected_variables(self, text):
+        """検出した変数を一括作成する"""
+        if not text or not text.strip():
+            return "❌ 検出対象テキストを入力してください", self.get_template_variables_display()
+        
+        variables = self.extract_variables_from_prompt(text)
+        if not variables:
+            return "❌ 作成する変数が見つかりませんでした", self.get_template_variables_display()
+        
+        # 既存変数を読み込み
+        existing_variables = self.get_template_variables_from_tool()
+        
+        created_count = 0
+        skipped_count = 0
+        
+        # 各変数を作成（既存の場合はスキップ）
+        for var_name in variables:
+            if var_name not in existing_variables:
+                existing_variables[var_name] = ""  # デフォルト値は空文字
+                created_count += 1
+            else:
+                skipped_count += 1
+        
+        # 保存
+        if created_count > 0:
+            if self.save_template_variables_to_tool(existing_variables):
+                result_msg = f"✅ {created_count}個の変数を作成しました"
+                if skipped_count > 0:
+                    result_msg += f" ({skipped_count}個は既存のためスキップ)"
+                return result_msg, self.get_template_variables_display()
+            else:
+                return "❌ 変数の保存に失敗しました", self.get_template_variables_display()
+        else:
+            return f"ℹ️ 作成する新しい変数はありませんでした ({skipped_count}個は既存)", self.get_template_variables_display()
+    
     def load_settings(self):
         """設定ファイルから設定をロード（prompt_sets構造対応）"""
         print(f"[DEBUG] load_settings() 開始")
@@ -1171,6 +1217,25 @@ def create_main_tab(gui):
                 visible=False
             )
             
+            # Stage3: 動的変数検出機能（CLAUDE.md整合性対応）
+            gr.Markdown("#### 🔍 変数自動検出")
+            detect_source_input = gr.Textbox(
+                label="検出対象テキスト", 
+                lines=4,
+                placeholder="プロンプトテキストを入力すると、{変数名}形式の変数を自動検出します..."
+            )
+            
+            with gr.Row():
+                extract_variables_btn = gr.Button("🔍 変数を検出", variant="secondary", scale=1)
+                auto_create_variables_btn = gr.Button("🚀 検出した変数を一括作成", variant="primary", scale=2)
+            
+            detected_variables_display = gr.Textbox(
+                label="検出された変数", 
+                lines=3,
+                interactive=False,
+                placeholder="変数検出結果がここに表示されます..."
+            )
+            
             # Phase1: 複数プロンプト機能
             gr.Markdown("### 🔄 プロンプトフロー機能")
             
@@ -1260,6 +1325,27 @@ def create_main_tab(gui):
         fn=handle_delete_variable,
         inputs=[delete_variable_name, bc_loop_input],  # bc_loop_input必須
         outputs=[template_variables_display, variable_operation_result, delete_variable_name]
+    ).then(
+        fn=lambda: gr.update(visible=True),
+        outputs=[variable_operation_result]
+    )
+    
+    # Stage3: 動的変数検出のイベントハンドラー（CLAUDE.md整合性対応）
+    extract_variables_btn.click(
+        fn=lambda text, bc_count: gui.extract_variables_from_text(text),
+        inputs=[detect_source_input, bc_loop_input],  # bc_loop_input必須（整合性保証）
+        outputs=[detected_variables_display]
+    )
+    
+    def handle_auto_create_variables(text, bc_count):
+        """変数一括作成処理（bc_countは参照整合性のため必須）"""
+        result_message, updated_display = gui.create_detected_variables(text)
+        return result_message, updated_display  # result表示, 変数リスト更新
+    
+    auto_create_variables_btn.click(
+        fn=handle_auto_create_variables,
+        inputs=[detect_source_input, bc_loop_input],  # bc_loop_input必須（整合性保証）
+        outputs=[variable_operation_result, template_variables_display]
     ).then(
         fn=lambda: gr.update(visible=True),
         outputs=[variable_operation_result]

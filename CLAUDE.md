@@ -102,6 +102,23 @@ AI chat applications（特にGenspark.ai）向けのChrome自動操作ツール�
     - チェックボックスイベントハンドラー統合（Gradio一貫性対応）
     - プロンプト選択過程のデバッグログ機能
 
+12. **テンプレート変数置換機能（2025-08-10実装完了）**
+    - **Phase 1**: 内部ロジック実装
+      - `{変数名}`形式のテンプレート変数サポート
+      - `template_variables.json`独立設定ファイル
+      - `replace_template_variables()`による自動置換処理
+      - `process_single_prompt()`統合実装
+      - 複数行テキスト対応・変数形式検証
+    
+    - **Phase 2**: GUI実装（CLAUDE.md整合性対応版）
+      - テンプレート変数表示セクション（読み取り専用）
+      - 変数追加機能: variable_name_input, variable_value_input, add_variable_btn
+      - 変数削除機能: delete_variable_name, delete_variable_btn
+      - CRUD操作メソッド: `add_template_variable()`, `delete_template_variable()`
+      - **Gradio Numberコンポーネント参照整合性完全対応**
+      - 全イベントハンドラーで`bc_loop_input`参照統一（一貫性の原則）
+      - フォールバック処理改善（tool未初期化時の直接ファイル操作）
+
 ### 🔧 最近修正した問題
 1. **エラーメッセージ誤認識の修正**
    - 「応答の生成中にエラーが発生しま」をエラーメッセージとして正しく識別
@@ -206,6 +223,7 @@ web-automate/
 ├── README.md              # インストール・使用方法
 ├── automation.log         # 実行ログ
 ├── gui_settings.json      # GUI設定永続化ファイル（自動生成）
+├── template_variables.json # テンプレート変数設定ファイル（自動生成）
 ├── outputs/               # 生成されたMarkdownファイル
 │   ├── output_001_YYYYMMDD_HHMMSS.md
 │   ├── output_002_YYYYMMDD_HHMMSS.md
@@ -222,11 +240,16 @@ web-automate/
 - `find_regenerate_button()` - 再生成ボタン検出・クリック
 - `handle_regenerate_with_retry()` - 再生成リトライ処理（最大20回）
 - `process_continuous_prompts()` - 継続的プロンプト処理ループ
-- `process_single_prompt(save_file=True)` - 単一プロンプト処理
+- `process_single_prompt(save_file=True)` - 単一プロンプト処理（テンプレート変数置換統合）
 - `get_latest_message_content(wait_for_streaming=True)` - 最新応答取得
 - `get_response_text()` - 応答テキスト取得（エラー検出付き）
 - `wait_for_streaming_response_complete()` - ストリーミング完了待機
 - `clean_response_text()` - 応答テキストクリーンアップ
+- **テンプレート変数関連**:
+  - `load_template_variables()` - template_variables.json読み込み
+  - `save_template_variables()` - template_variables.json保存
+  - `extract_template_variables()` - プロンプトから{変数名}抽出
+  - `replace_template_variables()` - 変数置換実行
 
 #### AutomationGUI クラス（gradio_gui.py）
 - `start_automation()` - GUI からの自動化開始
@@ -245,6 +268,14 @@ web-automate/
 - `stop_automation()` - 自動化停止・Chrome終了
 - `get_status_update()` - リアルタイムステータス更新
 - `get_response_update()` - 応答内容更新
+- **テンプレート変数関連**:
+  - `get_template_variables_from_tool()` - 変数取得（フォールバック対応）
+  - `save_template_variables_to_tool()` - 変数保存（フォールバック対応）
+  - `get_template_variables_display()` - 変数表示用文字列取得
+  - `refresh_template_variables()` - 変数表示更新
+  - `add_template_variable()` - 変数追加（形式検証付き）
+  - `delete_template_variable()` - 変数削除（存在確認付き）
+  - `extract_variables_from_prompt()` - プロンプトから変数抽出
 
 ### 🚀 使用方法
 
